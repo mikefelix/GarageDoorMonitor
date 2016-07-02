@@ -89,10 +89,13 @@ accel.on('error', function(err){
 });
 
 setInterval(function(){
-    if (counter == 200){
+    if (counter == 1800)
         counter = 0;
+
+    if (counter == 0)
         sendAlert('alive');
-    }
+
+    counter++;
 
     if (stateHasChanged())
         stateChange();
@@ -100,6 +103,7 @@ setInterval(function(){
     lastX = currX;
     lastY = currY;
     lastZ = currZ;
+
 }, 3000);
 
 http.createServer(function(request, response){
