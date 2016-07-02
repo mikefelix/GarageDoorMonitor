@@ -36,10 +36,16 @@ http.createServer(function(req, response) {
 
         reply(response, "OK");
     }
+    else if (uri == '/alive'){ // ping from tessel
+        console.log("Tessel is alive at " + new Date());
+        reply(response, "Yay!");
+    }
     else if (uri == '/open'){ // call from tessel
+        console.log('open');
         reply(response, "open alert sent");
     }
     else if (uri == '/closed'){ // call from tessel
+        console.log('closed');
         reply(response, "closed alert sent");
     }
     else if (uri == '/climate'){ // call from user
@@ -58,6 +64,14 @@ http.createServer(function(req, response) {
                 reply(response, "Garage is " + stateMsg + ".\n" + climateMsg);
             });
         });
+    }
+    else if (uri == '/home'){ // call from tessel
+        console.log("Nest home.");
+        exec('/home/felix/bin/snapshot.sh', function callback(error, stdout, stderr){
+            if (error) console.log("Failed to save snapshot. " + error);
+        });
+
+        reply(response, "Got it.");
     }
     else {
         reply(response, 404);
