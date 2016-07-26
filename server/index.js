@@ -66,7 +66,7 @@ http.createServer(function(req, response) {
         });
     }
     else if (uri == '/home'){ // call from tessel
-        console.log("Nest home.");
+        console.log("Nest home at " + new Date());
         exec('/home/felix/bin/snapshot.sh', function callback(error, stdout, stderr){
             if (error) console.log("Failed to save snapshot. " + error);
         });

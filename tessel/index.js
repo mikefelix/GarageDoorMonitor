@@ -64,7 +64,9 @@ function stateChange(){
     if (open){
         if (!alertTimer) {
             alertTimer = setTimeout(function () {
-                sendAlert("warn");
+                pulseRelay(function(){
+                    sendAlert("warn");
+                });
             }, WAIT_UNTIL_ALERT * 1000);
         }
     }
@@ -106,6 +108,28 @@ setInterval(function(){
 
 }, 3000);
 
+function pulseRelay(cb){
+    relay.toggle(1, function (err) {
+        if (err) {
+            console.log("Error 1 toggling relay.", err);
+            cb("Error 1 toggling relay. " + err);
+        }
+        else {
+            setTimeout(function(){
+                relay.toggle(1, function (err) {
+                    if (err) {
+                        console.log("Error 2 toggling relay.", err);
+                        cb('Error 2 toggling relay. ' + err);
+                    }
+                    else {
+                        cb('Toggled relay.');
+                    }
+                });
+            }, 500);
+        }
+    });
+}
+
 http.createServer(function(request, response){
   var uri = url.parse(request.url).pathname;
   if (uri == '/state'){
@@ -119,24 +143,8 @@ http.createServer(function(request, response){
       });
   }
   else if (uri == '/pulse'){
-      relay.toggle(1, function (err) {
-          if (err) {
-              console.log("Err toggling relay.", err);
-              reply(response, 'Error toggling relay.');
-          }
-          else {
-              setTimeout(function(){
-                  relay.toggle(1, function (err) {
-                      if (err) {
-                          console.log("Err toggling relay.", err);
-                          reply(response, 'Error toggling relay.');
-                      }
-                      else {
-                          reply(response, 'toggled');
-                      }
-                  });
-              }, 500);
-          }
+      pulseRelay(function(msg){
+        reply(response, msg);
       });
   }
   else {
