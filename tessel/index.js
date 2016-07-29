@@ -21,7 +21,9 @@ var ALERT_BASE_URL = "http://192.168.0.101/garage/";
 var lastX = 0, lastY = 0, lastZ = 1;
 var currX = 0, currY = 0, currZ = 1;
 var counter = 0;
-var alertTimer;
+var closeTimer;
+var keepOpen = false;
+var triedToClose = 0;
 
 function isOpen(){
     return currZ != 0;
@@ -59,23 +61,41 @@ function sendAlert(alert){
 
 function stateChange(){
     var open = isOpen();
-    sendAlert(open ? "open" : "closed");
+    sendAlert(open ? (keepOpen ? "force " : "") + "open" : "closed");
 
     if (open){
-        if (!alertTimer) {
-            alertTimer = setTimeout(function () {
-                pulseRelay(function(){
-                    sendAlert("warn");
-                });
-            }, WAIT_UNTIL_ALERT * 1000);
+        if (!keepOpen) {
+            if (!closeTimer) {
+                closeTimer = setTimeout(function () {
+                    if (triedToClose == 2){
+                        sendAlert("warn3");
+                    }
+                    if (triedToClose == 1){
+                        triedToClose = 2;
+                        pulseRelay(function(){
+                            sendAlert("warn2");
+                        });
+                    }
+                    else {
+                        triedToClose = 1;
+                        pulseRelay(function(){
+                            sendAlert("warn1");
+                        });
+                    }
+                }, WAIT_UNTIL_ALERT * 1000);
+            }
         }
     }
     else {
-        if (alertTimer) {
-            clearTimeout(alertTimer);
-            alertTimer = null;
+        triedToClose = 0;
+        keepOpen = false;
+        if (closeTimer) {
+            clearTimeout(closeTimer);
+            closeTimer = null;
         }
     }
+
+    keepOpen = false;
 };
 
 accel.on('ready', function () {
@@ -135,17 +155,41 @@ http.createServer(function(request, response){
   if (uri == '/state'){
       reply(response, isOpen() ? "open" : "closed");
   }
-  else if (uri == '/climate'){
+  /*else if (uri == '/climate'){
       climate.readTemperature('f', function (err, temp) {
           climate.readHumidity(function (err, humid) {
               reply(response, 'Temp: ' + temp.toFixed(1) + 'F' + ', Hum: ' + humid.toFixed(1) + '%');
           });
       });
-  }
-  else if (uri == '/pulse'){
+  }*/
+  else if (uri == '/toggle'){
       pulseRelay(function(msg){
         reply(response, msg);
       });
+  }
+  else if (uri == '/open' || url == '/forceopen'){
+      keepOpen = url == '/forceopen';
+      
+      if (!isOpen()){
+          pulseRelay(function(msg){
+              reply(response, msg + ' Opened.' + (keepOpen ? " Forced to stay." : ""));
+          });
+      }
+      else {
+          clearTimeout(closeTimer);
+          closeTimer = null;
+          reply(response, 'Already open.' + (keepOpen ? " Forced to stay." : ""));
+      }
+  }
+  else if (uri == '/close'){
+      if (isOpen()){
+          pulseRelay(function(msg){
+              reply(response, msg);
+          });
+      }
+      else {
+          reply(response, 'Already closed.');
+      }
   }
   else {
       reply(response, 404);
