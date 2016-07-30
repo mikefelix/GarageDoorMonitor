@@ -167,8 +167,8 @@ http.createServer(function(request, response){
         reply(response, msg);
       });
   }
-  else if (uri == '/open' || url == '/forceopen'){
-      keepOpen = url == '/forceopen';
+  else if (uri == '/open' || uri == '/forceopen'){
+      keepOpen = uri == '/forceopen';
       
       if (!isOpen()){
           pulseRelay(function(msg){
