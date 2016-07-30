@@ -65,7 +65,7 @@ http.createServer(function(req, response) {
         reply(response, "closed alert received");
     }
     else if (uri == '/close'){ // call from user
-        if (auth(req.param('key'))){
+        if (/auth=gungeon/.test(req.url)){
             callTessel('close', function(msg){
                 reply(response, msg);
             });
@@ -75,8 +75,8 @@ http.createServer(function(req, response) {
         }
     }
     else if (uri == '/open'){ // call from user
-        if (auth(req.param('key'))){
-            if (req.param('force')){
+        if (/auth=gungeon/.test(req.url)){
+            if (/force=true/.test(req.url)){
                 callTessel('forceopen', function(msg){
                     reply(response, msg);
                 });
