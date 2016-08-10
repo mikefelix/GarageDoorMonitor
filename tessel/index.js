@@ -61,7 +61,7 @@ function sendAlert(alert){
 
 function stateChange(){
     var open = isOpen();
-    sendAlert(open ? (keepOpen ? "force " : "") + "open" : "closed");
+    sendAlert(open ? (keepOpen ? "force " : "") + "opened" : "closed");
 
     if (open){
         if (!keepOpen) {
