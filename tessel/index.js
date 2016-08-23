@@ -15,15 +15,16 @@ var request = require('request');
 var http = require('http');
 var url = require('url');
 
-var WAIT_UNTIL_ALERT = 600; //seconds
+var WAIT_UNTIL_ALERT = 300; //seconds
 var ALERT_BASE_URL = "http://192.168.0.101/garage/";
 
-var lastX = 0, lastY = 0, lastZ = 1;
-var currX = 0, currY = 0, currZ = 1;
+var lastX = 0, lastY = 0, lastZ = 0;
+var currX = 0, currY = 0, currZ = 0;
 var counter = 0;
 var closeTimer;
 var keepOpen = false;
 var triedToClose = 0;
+var lastOpenTime, lastCloseTime, nextCloseTime;
 
 function isOpen(){
     return currZ != 0;
@@ -35,7 +36,11 @@ function stateHasChanged(){
 
 function reply(res, msg){
     if (typeof msg == 'number'){
-        res.writeHead(msg);
+        res.writeHead(msg); // use number as status code, no body
+    }
+    else if (typeof msg == 'object'){
+        res.writeHead(200);
+        res.write(JSON.stringify(msg));
     }
     else if (typeof msg == 'string'){
         res.writeHead(200);
@@ -60,43 +65,59 @@ function sendAlert(alert){
 }
 
 function stateChange(){
-    var open = isOpen();
-    sendAlert(open ? (keepOpen ? "force " : "") + "opened" : "closed");
-
-    if (open){
-        if (!keepOpen) {
-            if (!closeTimer) {
-                closeTimer = setTimeout(function () {
-                    if (triedToClose == 2){
-                        sendAlert("warn3");
-                    }
-                    if (triedToClose == 1){
-                        triedToClose = 2;
-                        pulseRelay(function(){
-                            sendAlert("warn2");
-                        });
-                    }
-                    else {
-                        triedToClose = 1;
-                        pulseRelay(function(){
-                            sendAlert("warn1");
-                        });
-                    }
-                }, WAIT_UNTIL_ALERT * 1000);
-            }
-        }
+    if (isOpen()){
+        sendAlert((keepOpen ? "force" : "") + "opened");
+        doorOpened();
     }
     else {
-        triedToClose = 0;
-        keepOpen = false;
-        if (closeTimer) {
-            clearTimeout(closeTimer);
-            closeTimer = null;
-        }
+        sendAlert("closed");
+        doorClosed();
     }
+}
 
+function doorClosed(){
+    triedToClose = 0;
+    lastCloseTime = new Date();
     keepOpen = false;
+    if (closeTimer)
+        clearTimeout(closeTimer);
+
+    closeTimer = null;
+}
+
+function doorOpened(){
+    lastOpenTime = new Date();
+
+    if (closeTimer) 
+        clearTimeout(closeTimer);
+
+    closeTimer = null;
+    nextCloseTime = null;
+
+    if (!keepOpen) {
+        var wait = WAIT_UNTIL_ALERT * 1000;
+        nextCloseTime = new Date(Date.now() + wait);
+        closeTimer = setTimeout(attemptToClose, wait);
+    }
 };
+
+function attemptToClose(){
+    if (triedToClose == 2){
+        sendAlert("warn3");
+    }
+    if (triedToClose == 1){
+        triedToClose = 2;
+        pulseRelay(function(){
+            sendAlert("warn2");
+        });
+    }
+    else {
+        triedToClose = 1;
+        pulseRelay(function(){
+            sendAlert("warn1");
+        });
+    }
+}
 
 accel.on('ready', function () {
     accel.on('data', function (xyz) {
@@ -153,7 +174,14 @@ function pulseRelay(cb){
 http.createServer(function(request, response){
   var uri = url.parse(request.url).pathname;
   if (uri == '/state'){
-      reply(response, isOpen() ? "open" : "closed");
+      reply(response, {
+          is_open: isOpen(),
+          last_open_time: lastOpenTime,
+          last_close_time: lastCloseTime,
+          next_close_time: nextCloseTime,
+          close_attempts: triedToClose,
+          current_time: new Date()
+      });
   }
   /*else if (uri == '/climate'){
       climate.readTemperature('f', function (err, temp) {
