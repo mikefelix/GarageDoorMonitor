@@ -20,6 +20,10 @@ function reply(res, msg){
     if (typeof msg == 'number'){
         res.writeHead(msg);
     }
+    else if (typeof msg == 'object'){
+        res.writeHead(200);
+        res.write(JSON.stringify(msg));
+    }
     else if (typeof msg == 'string'){
         res.writeHead(200);
         res.write(msg);
