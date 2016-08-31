@@ -14,6 +14,8 @@ var emailAddress = process.argv[3];
 var tesselAddress = process.argv[4];
 var authKey = process.argv[5];
 
+console.log("Process started at " + new Date());
+
 function reply(res, msg){
     if (typeof msg == 'number'){
         res.writeHead(msg);
@@ -53,7 +55,7 @@ http.createServer(function(req, response) {
         reply(response, "OK");
     }
     else if (uri == '/alive'){ // ping from tessel
-        console.log("Tessel is alive at " + new Date());
+        console.log("Tessel reports that it is alive at " + new Date());
         reply(response, "Yay!");
     }
     else if (uri == '/forceopened'){ // call from tessel
@@ -113,8 +115,8 @@ http.createServer(function(req, response) {
         }
     }
     else if (uri == '/state'){ // call from user
-        callTessel('state', function(msg){
-            reply(response, msg);
+        callTessel('state', function(state){
+            reply(response, state);
         });
     }
     else if (uri == '/home'){ 
