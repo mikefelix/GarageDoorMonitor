@@ -62,10 +62,10 @@ http.createServer(function(req, response) {
         console.log("Tessel reports that it is alive at " + new Date());
         reply(response, "Yay!");
     }
-    else if (url.match(/^\/opened/)){ // call from tessel
+    else if (uri.match(/^\/opened/)){ // call from tessel
         var t = 'indefinitely';
-        if (url.match(/[0-9]+/))
-            t = url.match(/[0-9]+/)[0];
+        if (uri.match(/[0-9]+/))
+            t = uri.match(/[0-9]+/)[0];
 
         console.log('Tessel reports opened ' + t + ' state at ' + new Date());
         reply(response, "opened alert received");
