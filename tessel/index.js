@@ -15,7 +15,6 @@ var request = require('request');
 var http = require('http');
 var url = require('url');
 
-var WAIT_UNTIL_ALERT = 300; //seconds
 var ALERT_BASE_URL = "http://192.168.0.101/garage/";
 
 var lastX = 0, lastY = 0, lastZ = 0;
@@ -68,7 +67,7 @@ function sendAlert(alert){
 
 function stateChange(){
     if (isOpen()){
-        sendAlert((keepOpen === true ? "force" : "") + "opened");
+        sendAlert("opened" + (typeof keepOpen == 'number' ? keepOpen : ''));
         doorOpened();
     }
     else {
@@ -96,8 +95,8 @@ function doorOpened(){
     closeTimer = null;
     nextCloseTime = null;
 
-    if (keepOpen !== true) {
-        var wait = (typeof keepOpen == 'number' ? keepOpen : WAIT_UNTIL_ALERT) * 1000;
+    if (typeof keepOpen == 'number') {
+        var wait = keepOpen * 1000;
         nextCloseTime = new Date(Date.now() + wait);
         closeTimer = setTimeout(attemptToClose, wait);
     }
@@ -178,6 +177,7 @@ http.createServer(function(request, response){
   if (uri == '/state'){
       reply(response, {
           is_open: isOpen(),
+          keep_open: keepOpen,
           last_open_time: lastOpenTime,
           last_close_time: lastCloseTime,
           next_close_time: nextCloseTime,
@@ -192,24 +192,19 @@ http.createServer(function(request, response){
           });
       });
   }*/
-  else if (uri == '/toggle'){
-      pulseRelay(function(msg){
-        reply(response, msg);
-      });
-  }
-  else if (uri.match(/^\/open/) || uri == '/forceopen'){ 
+  else if (uri.match(/^\/open/)){ 
       var interval;
-      if (uri == '/forceopen'){
+      if (uri == '/open'){
           keepOpen = true;
           interval = ' indefinitely';
       }
-      else if (uri.match(/[0-9]+/)){
-          keepOpen = Math.floor(uri.match(/[0-9]+/)[0]);
-          interval = ' for ' + keepOpen;
-      }
       else {
-          keepOpen = false;
-          interval = '';
+          if (uri.match(/[0-9]+/))
+              keepOpen = Math.floor(uri.match(/[0-9]+/)[0]);
+          else
+              keepOpen = 10;
+
+          interval = ' for ' + keepOpen;
       }
       
       if (!isOpen()){
@@ -220,7 +215,7 @@ http.createServer(function(request, response){
       else {
           clearTimeout(closeTimer);
           closeTimer = null;
-          reply(response, 'Already open.');
+          reply(response, 'Already open. Remaining open' + interval + '.');
       }
   }
   else if (uri == '/close'){
