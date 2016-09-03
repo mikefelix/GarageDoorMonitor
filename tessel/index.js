@@ -26,6 +26,8 @@ var keepOpen = false;
 var triedToClose = 0;
 var lastOpenTime, lastCloseTime, nextCloseTime;
 
+sendAlert('alive');
+
 function isOpen(){
     return currZ != 0;
 }
@@ -131,7 +133,7 @@ accel.on('error', function(err){
   console.log('Error:', err);
 });
 
-setInterval(function(){
+/*setInterval(function(){
     if (counter == 1800)
         counter = 0;
 
@@ -147,7 +149,7 @@ setInterval(function(){
     lastY = currY;
     lastZ = currZ;
 
-}, 3000);
+}, 3000);*/
 
 function pulseRelay(cb){
     relay.toggle(1, function (err) {
