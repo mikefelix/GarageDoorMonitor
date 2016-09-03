@@ -19,7 +19,7 @@ var ALERT_BASE_URL = "http://192.168.0.101/garage/";
 
 var lastX = 0, lastY = 0, lastZ = 0;
 var currX = 0, currY = 0, currZ = 0;
-var counter = 0;
+//var counter = 0;
 var closeTimer;
 var keepOpen = false;
 var triedToClose = 0;
@@ -67,16 +67,15 @@ function sendAlert(alert){
 
 function stateChange(){
     if (isOpen()){
-        sendAlert("opened" + (typeof keepOpen == 'number' ? keepOpen : ''));
         doorOpened();
     }
     else {
-        sendAlert("closed");
         doorClosed();
     }
 }
 
 function doorClosed(){
+    sendAlert("closed");
     triedToClose = 0;
     lastCloseTime = new Date();
     keepOpen = false;
@@ -87,6 +86,7 @@ function doorClosed(){
 }
 
 function doorOpened(){
+    sendAlert("opened" + (typeof keepOpen == 'number' ? keepOpen : ''));
     lastOpenTime = new Date();
 
     if (closeTimer) 
@@ -96,7 +96,7 @@ function doorOpened(){
     nextCloseTime = null;
 
     if (typeof keepOpen == 'number') {
-        var wait = keepOpen * 1000;
+        var wait = keepOpen * 60000;
         nextCloseTime = new Date(Date.now() + wait);
         closeTimer = setTimeout(attemptToClose, wait);
     }
@@ -132,14 +132,14 @@ accel.on('error', function(err){
   console.log('Error:', err);
 });
 
-/*setInterval(function(){
-    if (counter == 1800)
-        counter = 0;
+setInterval(function(){
+    //if (counter == 1800)
+        //counter = 0;
 
-    if (counter == 0)
-        sendAlert('alive');
+    //if (counter == 0)
+        //sendAlert('alive');
 
-    counter++;
+    //counter++;
 
     if (stateHasChanged())
         stateChange();
@@ -148,7 +148,7 @@ accel.on('error', function(err){
     lastY = currY;
     lastZ = currZ;
 
-}, 3000);*/
+}, 3000);
 
 function pulseRelay(cb){
     relay.toggle(1, function (err) {
@@ -209,13 +209,13 @@ http.createServer(function(request, response){
       
       if (!isOpen()){
           pulseRelay(function(msg){
-              reply(response, msg + ' Opened' + interval + '.');
+              reply(response, msg + ' Opening' + interval + '.');
           });
       }
       else {
           clearTimeout(closeTimer);
           closeTimer = null;
-          reply(response, 'Already open. Remaining open' + interval + '.');
+          reply(response, 'Already open. Keeping open' + interval + '.');
       }
   }
   else if (uri == '/close'){
