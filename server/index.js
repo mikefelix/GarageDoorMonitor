@@ -39,7 +39,7 @@ http.createServer(function(req, response) {
 
     if (uri == '/warn1'){
         console.log("Send warning 1 at " + new Date());
-        mail("Garage left open", "The garage has been open for too long. Shutting it.");
+        //mail("Garage left open", "The garage has been open for too long. Shutting it.");
         reply(response, "OK");
     }
     else if (uri == '/warn2'){
@@ -97,6 +97,13 @@ http.createServer(function(req, response) {
             if (/force=true/.test(req.url)){
                 console.log('Force open command received at ' + new Date());
                 callTessel('forceopen', function(msg){
+                    reply(response, msg);
+                });
+            }
+            else if (/force=[0-9]+/.test(req.url)){
+                var time = req.url.match(/force=([0-9]+)/)[1];
+                console.log('Open ' + time + ' command received at ' + new Date());
+                callTessel('open' + time, function(msg){
                     reply(response, msg);
                 });
             }

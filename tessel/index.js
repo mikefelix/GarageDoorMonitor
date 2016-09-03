@@ -66,7 +66,7 @@ function sendAlert(alert){
 
 function stateChange(){
     if (isOpen()){
-        sendAlert((keepOpen ? "force" : "") + "opened");
+        sendAlert((keepOpen === true ? "force" : "") + "opened");
         doorOpened();
     }
     else {
@@ -94,8 +94,8 @@ function doorOpened(){
     closeTimer = null;
     nextCloseTime = null;
 
-    if (!keepOpen) {
-        var wait = WAIT_UNTIL_ALERT * 1000;
+    if (keepOpen !== true) {
+        var wait = (typeof keepOpen == 'number' ? keepOpen : WAIT_UNTIL_ALERT) * 1000;
         nextCloseTime = new Date(Date.now() + wait);
         closeTimer = setTimeout(attemptToClose, wait);
     }
@@ -195,18 +195,30 @@ http.createServer(function(request, response){
         reply(response, msg);
       });
   }
-  else if (uri == '/open' || uri == '/forceopen'){
-      keepOpen = uri == '/forceopen';
+  else if (uri.match(/^\/open/) || uri == '/forceopen'){ 
+      var interval;
+      if (uri == '/forceopen'){
+          keepOpen = true;
+          interval = ' indefinitely';
+      }
+      else if (uri.match(/[0-9]+/)){
+          keepOpen = Math.floor(uri.match(/[0-9]+/)[0]);
+          interval = ' for ' + keepOpen;
+      }
+      else {
+          keepOpen = false;
+          interval = '';
+      }
       
       if (!isOpen()){
           pulseRelay(function(msg){
-              reply(response, msg + ' Opened.' + (keepOpen ? " Forced to stay." : ""));
+              reply(response, msg + ' Opened' + interval + '.');
           });
       }
       else {
           clearTimeout(closeTimer);
           closeTimer = null;
-          reply(response, 'Already open.' + (keepOpen ? " Forced to stay." : ""));
+          reply(response, 'Already open.');
       }
   }
   else if (uri == '/close'){
