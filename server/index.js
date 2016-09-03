@@ -62,34 +62,23 @@ http.createServer(function(req, response) {
         console.log("Tessel reports that it is alive at " + new Date());
         reply(response, "Yay!");
     }
-    else if (uri == '/forceopened'){ // call from tessel
-        console.log('Tessel reports forced open state at ' + new Date());
-        reply(response, "forcedopen alert received");
-    }
-    else if (uri == '/opened'){ // call from tessel
-        console.log('Tessel reports opened state at ' + new Date());
-        reply(response, "open alert received");
+    else if (url.match(/^\/opened/)){ // call from tessel
+        var t = 'indefinitely';
+        if (url.match(/[0-9]+/))
+            t = url.match(/[0-9]+/)[0];
+
+        console.log('Tessel reports opened ' + t + ' state at ' + new Date());
+        reply(response, "opened alert received");
     }
     else if (uri == '/closed'){ // call from tessel
         console.log('Tessel reports closed state at ' + new Date());
         reply(response, "closed alert received");
     }
-    else if (uri == '/toggle'){ // call from user
-        if (new RegExp('auth=' + authKey).test(req.url)){
-            console.log('Toggle command received at ' + new Date());
-            callTessel('toggle', function(msg){
-                reply(response, msg);
-            });
-        }
-        else {
-            console.log('401 on toggle command at ' + new Date());
-            reply(response, 401);
-        }
-    }
     else if (uri == '/close'){ // call from user
         if (new RegExp('auth=' + authKey).test(req.url)){
             console.log('Close command received at ' + new Date());
             callTessel('close', function(msg){
+                console.log('Tessel replies: ' + msg);
                 reply(response, msg);
             });
         }
@@ -98,24 +87,20 @@ http.createServer(function(req, response) {
             reply(response, 401);
         }
     }
-    else if (uri == '/open'){ // call from user
+    else if (uri.match(/^\/open/)){ // call from user
         if (new RegExp('auth=' + authKey).test(req.url)){
-            if (/force=true/.test(req.url)){
-                console.log('Force open command received at ' + new Date());
-                callTessel('forceopen', function(msg){
-                    reply(response, msg);
-                });
-            }
-            else if (/force=[0-9]+/.test(req.url)){
-                var time = req.url.match(/force=([0-9]+)/)[1];
+            if (/open[0-9]+/.test(uri)){
+                var time = uri.match(/open([0-9]+)/)[1];
                 console.log('Open ' + time + ' command received at ' + new Date());
                 callTessel('open' + time, function(msg){
+                    console.log('Tessel replies: ' + msg);
                     reply(response, msg);
                 });
             }
             else {
-                console.log('Open command received at ' + new Date());
+                console.log('Open indefinitely command received at ' + new Date());
                 callTessel('open', function(msg){
+                    console.log('Tessel replies: ' + msg);
                     reply(response, msg);
                 });
             }
