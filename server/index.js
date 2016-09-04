@@ -99,7 +99,7 @@ http.createServer(function(req, response) {
             }
             else {
                 console.log('Open indefinitely command received at ' + new Date());
-                callTessel('open', function(msg){
+                callTessel('open0', function(msg){
                     console.log('Tessel replies: ' + msg);
                     reply(response, msg);
                 });
@@ -112,6 +112,7 @@ http.createServer(function(req, response) {
     }
     else if (uri == '/state'){ // call from user
         callTessel('state', function(state){
+            //console.dir(state);
             reply(response, state);
         });
     }

@@ -23,6 +23,7 @@ var currX = 0, currY = 0, currZ = 0;
 var closeTimer;
 var keepOpen = false;
 var triedToClose = 0;
+var defaultAutoCloseMins = 10;
 var lastOpenTime, lastCloseTime, nextCloseTime;
 
 sendAlert('alive');
@@ -79,27 +80,16 @@ function doorClosed(){
     triedToClose = 0;
     lastCloseTime = new Date();
     keepOpen = false;
-    if (closeTimer)
-        clearTimeout(closeTimer);
-
-    closeTimer = null;
+    resetCloseTimer();
 }
 
 function doorOpened(){
     sendAlert("opened" + (typeof keepOpen == 'number' ? keepOpen : ''));
     lastOpenTime = new Date();
+    if (keepOpen === false)
+        keepOpen = defaultAutoCloseMins;
 
-    if (closeTimer) 
-        clearTimeout(closeTimer);
-
-    closeTimer = null;
-    nextCloseTime = null;
-
-    if (typeof keepOpen == 'number') {
-        var wait = keepOpen * 60000;
-        nextCloseTime = new Date(Date.now() + wait);
-        closeTimer = setTimeout(attemptToClose, wait);
-    }
+    resetCloseTimer();
 };
 
 function attemptToClose(){
@@ -172,6 +162,20 @@ function pulseRelay(cb){
     });
 }
 
+function resetCloseTimer(){
+    if (closeTimer) 
+        clearTimeout(closeTimer);
+
+    closeTimer = null;
+    nextCloseTime = null;
+
+    if (typeof keepOpen == 'number') {
+        var wait = keepOpen * 1000;
+        nextCloseTime = new Date(Date.now() + wait);
+        closeTimer = setTimeout(attemptToClose, wait);
+    }
+};
+
 http.createServer(function(request, response){
   var uri = url.parse(request.url).pathname;
   if (uri == '/state'){
@@ -192,23 +196,33 @@ http.createServer(function(request, response){
           });
       });
   }*/
-  else if (uri.match(/^\/open/)){ 
-      var interval;
-      if (uri == '/open'){
-          keepOpen = true;
-          interval = ' indefinitely';
+  else if (/^\/default/.test(uri)){ 
+      var match = uri.match(/^\/default([0-9]*)/);
+      if (match[1]){
+          defaultAutoCloseMins = Math.floor(match[1]);
+          reply(response, 'Set default autoclose minutes to ' + match[1]);
       }
       else {
-          if (uri.match(/[0-9]+/))
-              keepOpen = Math.floor(uri.match(/[0-9]+/)[0]);
-          else
-              keepOpen = 10;
-
-          interval = ' for ' + keepOpen;
+          reply(response, 400);
+      }
+  }
+  else if (/^\/open/.test(uri)){ 
+      var match = uri.match(/^\/open([0-9]*)/);
+      if (match[1] == '0'){
+          keepOpen = true;
+      }
+      else if (match[1]){
+          keepOpen = Math.floor(match[1]);
+      }
+      else {
+          keepOpen = false;
+          reply(response, 404);
+          return;
       }
       
       if (!isOpen()){
           pulseRelay(function(msg){
+<<<<<<< HEAD
               reply(response, msg + ' Opening' + interval + '.');
           });
       }
@@ -216,10 +230,20 @@ http.createServer(function(request, response){
           clearTimeout(closeTimer);
           closeTimer = null;
           reply(response, 'Already open. Keeping open' + interval + '.');
+=======
+              reply(response, msg + ' Opened ' + (keepOpen === true ? 'indefinitely' : keepOpen) + '.');
+          });
+      }
+      else {
+          resetCloseTimer();
+          reply(response, 'Already open. Remaining open' + (keepOpen === true ? 'indefinitely' : keepOpen) + '.');
+>>>>>>> default time changes
       }
   }
   else if (uri == '/close'){
       if (isOpen()){
+          keepOpen = false;
+          resetCloseTimer();
           pulseRelay(function(msg){
               reply(response, msg);
           });
