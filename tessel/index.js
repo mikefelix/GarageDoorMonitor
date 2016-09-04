@@ -222,22 +222,12 @@ http.createServer(function(request, response){
       
       if (!isOpen()){
           pulseRelay(function(msg){
-<<<<<<< HEAD
-              reply(response, msg + ' Opening' + interval + '.');
-          });
-      }
-      else {
-          clearTimeout(closeTimer);
-          closeTimer = null;
-          reply(response, 'Already open. Keeping open' + interval + '.');
-=======
               reply(response, msg + ' Opened ' + (keepOpen === true ? 'indefinitely' : keepOpen) + '.');
           });
       }
       else {
           resetCloseTimer();
           reply(response, 'Already open. Remaining open' + (keepOpen === true ? 'indefinitely' : keepOpen) + '.');
->>>>>>> default time changes
       }
   }
   else if (uri == '/close'){
