@@ -170,7 +170,7 @@ function resetCloseTimer(){
     nextCloseTime = null;
 
     if (typeof keepOpen == 'number') {
-        var wait = keepOpen * 1000;
+        var wait = keepOpen * 60000;
         nextCloseTime = new Date(Date.now() + wait);
         closeTimer = setTimeout(attemptToClose, wait);
     }
