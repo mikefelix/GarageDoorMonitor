@@ -227,7 +227,7 @@ http.createServer(function(request, response){
       }
       else {
           resetCloseTimer();
-          reply(response, 'Already open. Remaining open' + (keepOpen === true ? 'indefinitely' : keepOpen) + '.');
+          reply(response, 'Already open. Remaining open ' + (keepOpen === true ? 'indefinitely' : keepOpen) + '.');
       }
   }
   else if (uri == '/close'){

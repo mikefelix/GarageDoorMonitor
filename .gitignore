@@ -1,1 +1,3 @@
 node_modules
+*.class
+garager/platforms/android/CordovaLib/build/intermediates/classes

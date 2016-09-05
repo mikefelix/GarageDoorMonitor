@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css">
+<style>
+    .main {
+        font-size: 1.2em;
+    }
+</style>
+<script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
+<script src="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
+<script>
+    var auth='$AUTH_KEY';
+    var timeUntilClose = 0;
+    var countdownTimeout;
+    function countDown(){
+        $('.time').html('Closing in ' + timeUntilClose + ' seconds.');
+        if (timeUntilClose > 0){
+            timeUntilClose--;
+            countdownTimeout = setTimeout(countDown, 1000);
+        }
+        else {
+            $('.time').html('Closing...');
+            countdownTimeout = null;
+            setTimeout(refresh, 15000);
+        }
+    }
+
+    function formatTime(time){
+        var date = ('' + new Date(time)).replace(/ ?GMT-.... \(...\) ?/,'am')
+        .replace(/(\w{3} \w{3} \d{2}) \d{4}/, '$1,')
+            .replace(/13:(..:..)am/, "1:$1pm")
+            .replace(/14:(..:..)am/, "2:$1pm")
+            .replace(/15:(..:..)am/, "3:$1pm")
+            .replace(/16:(..:..)am/, "4:$1pm")
+            .replace(/17:(..:..)am/, "5:$1pm")
+            .replace(/18:(..:..)am/, "6:$1pm")
+            .replace(/19:(..:..)am/, "7:$1pm")
+            .replace(/20:(..:..)am/, "8:$1pm")
+            .replace(/21:(..:..)am/, "9:$1pm")
+            .replace(/22:(..:..)am/, "10:$1pm")
+            .replace(/23:(..:..)am/, "11:$1pm")
+            .replace(/00:(..:..)am/, "12:$1am");
+            return date;
+    }
+
+    function refresh(){
+        $('.main').hide();
+        $.get("http://mozzarelly.com/garage/state", function( data ) {
+            //data = '{"is_open":true,"last_open_time":"2016-08-27T17:36:34.654Z","last_close_time":"2016-08-27T18:48:48.534Z","next_close_time":"2016-08-27T18:59:59.743Z","close_attempts":0,"current_time":"2016-08-27T18:57:57.743Z"}';
+            var state = JSON.parse(data);
+            console.dir(state);
+            if (state.last_open_time){
+                var date = formatTime(state.last_open_time);
+                $('.lastopen').html('Last opened: ' + date);
+            }
+
+            if (state.last_close_time){
+                var date = formatTime(state.last_close_time);
+                $('.lastclose').html('Last closed: ' + date);
+            }
+
+            $(".state").html(state.is_open ? "open" : "closed");
+            if (state.is_open){
+                var time;
+                $(".open").hide();
+                $(".close").show();
+
+                if (state.next_close_time && state.current_time){
+                    timeUntilClose = Math.floor((new Date(state.next_close_time) - new Date(state.current_time)) / 1000);
+                    if (!countdownTimeout)
+                        countDown();
+                }
+                else {
+                    $('.time').html("No close time scheduled.");
+                }
+
+                $(".time").show();
+            }
+            else {
+                $(".close").hide();
+                $(".time").hide();
+                $(".open").show();
+            }
+
+            $(".main").show();
+        }).fail(function(){
+            $('.state').html("unreachable! Network error");
+            $(".main").show();
+        });
+    }
+
+    $(document).ready(function(){
+        $(".refresh").click(refresh);
+        $(".time1").click(function(){open(1)});
+        $(".time5").click(function(){open(5)});
+        $(".time10").click(function(){open(10)});
+        $(".timeinf").click(function(){open});
+        $(".close").click(close);
+        refresh();
+    });
+
+    function open(time){
+        $('.time').html('Opening...');
+        $('.time').show();
+
+        var t;
+        if (typeof time == 'number')
+            t = time;
+        else
+            t = '';
+
+        $.get("http://mozzarelly.com/garage/open" + t + "?auth=" + auth, function(){
+            setTimeout(refresh, 15000);
+        });
+    }
+
+    function close(){
+        if (countdownTimeout) {
+            clearTimeout(countdownTimeout);
+            counddownTimeout = null;
+        }
+
+        $('.time').html('Closing...');
+        $('.time').show();
+        $.get("http://mozzarelly.com/garage/close?auth=" + auth, function(){
+            setTimeout(refresh, 15000);
+        });
+    }
+</script>
+</head>
+<body>
+
+<div data-role="page" id="pageone">
+  <div data-role="header">
+    <h1>Garage</h1>
+  </div>
+
+  <div data-role="main" class="main ui-content" style="display:none">
+    Garage is <span class="state"></span>.
+    <span class="time"></span>
+    <div class="lastopen"></div>
+    <div class="lastclose"></div>
+    <a class="open time1 ui-btn">Open for 1 minute</a>
+    <a class="open time5 ui-btn">Open for 5 minutes</a>
+    <a class="open time10 ui-btn">Open for 10 minutes</a>
+    <a class="open ui-btn">Open indefinitely</a>
+    <a class="close ui-btn">Close</a>
+  </div>
+  <div class="ui-content">
+    <a class="refresh ui-btn">Refresh</a>
+  </div>
+
+</div>
+
+</body>
+</html>
