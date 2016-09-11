@@ -11,7 +11,7 @@
 <script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
 <script src="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
 <script>
-    var auth='$AUTH_KEY';
+    var auth='h7geDG5gGG97q';
     var timeUntilClose = 0;
     var countdownTimeout;
     function countDown(){
@@ -47,6 +47,7 @@
 
     function refresh(){
         $('.main').hide();
+        $('.refresh').html('Refreshing...');
         $.get("http://mozzarelly.com/garage/state", function( data ) {
             //data = '{"is_open":true,"last_open_time":"2016-08-27T17:36:34.654Z","last_close_time":"2016-08-27T18:48:48.534Z","next_close_time":"2016-08-27T18:59:59.743Z","close_attempts":0,"current_time":"2016-08-27T18:57:57.743Z"}';
             var state = JSON.parse(data);
@@ -59,6 +60,11 @@
             if (state.last_close_time){
                 var date = formatTime(state.last_close_time);
                 $('.lastclose').html('Last closed: ' + date);
+            }
+
+            if (state.current_time){
+                var date = formatTime(state.current_time);
+                $('.current').html('Current time: ' + date);
             }
 
             $(".state").html(state.is_open ? "open" : "closed");
@@ -84,9 +90,11 @@
                 $(".open").show();
             }
 
+            $(".refresh").html('Refresh');
             $(".main").show();
         }).fail(function(){
             $('.state').html("unreachable! Network error");
+            $(".refresh").hide('Refresh');
             $(".main").show();
         });
     }
@@ -145,11 +153,14 @@
     <a class="open time1 ui-btn">Open for 1 minute</a>
     <a class="open time5 ui-btn">Open for 5 minutes</a>
     <a class="open time10 ui-btn">Open for 10 minutes</a>
-    <a class="open ui-btn">Open indefinitely</a>
+    <a class="open timeinf ui-btn">Open indefinitely</a>
     <a class="close ui-btn">Close</a>
   </div>
   <div class="ui-content">
     <a class="refresh ui-btn">Refresh</a>
+  </div>
+  <div class="ui-content">
+    <div class="current"></div>
   </div>
 
 </div>
