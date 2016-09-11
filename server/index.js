@@ -2,6 +2,7 @@ var http = require("http"),
     url = require("url"),
     path = require("path"),
     request = require('request'),
+    wemo = require('wemo-client'),
     exec = require('child_process').exec;
 
 if (!process.argv[4]){
@@ -104,6 +105,8 @@ http.createServer(function(req, response) {
                     reply(response, msg);
                 });
             }
+
+            handleLights();
         }
         else {
             console.log('401 on open at ' + new Date());
@@ -138,5 +141,27 @@ function callTessel(uri, callback){
           callback(body);
       }
   });
+}
+
+function handleLights(){
+    for (var i = 0; i < 5; i++){
+        wemo.discover(function(deviceInfo){
+            if (deviceInfo) console.log(i + ": discovered device " + deviceInfo.friendlyName);
+            if (deviceInfo && deviceInfo.friendlyName == 'Lamp'){
+                i = 5;
+                var client = wemo.getClient(deviceInfo);
+                client.getBinaryState(function(err, state){
+                    if (err) {
+                        console.log("Error getting lamp state: " + err);
+                    }
+                    else if (state == 0){
+                        console.log("Turning on lamp.");
+                        client.setBinaryState(1);
+                    }
+                    else console.log("Lamp wasn't off.");
+                });
+            }
+        });
+    }
 }
 
