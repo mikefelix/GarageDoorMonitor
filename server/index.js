@@ -128,6 +128,7 @@ http.createServer(function(req, response) {
         reply(response, "Got it.");
     }
     else {
+        console.log('Unknown URI: ' + uri);
         reply(response, 404);
     }
 }).listen(8888);
