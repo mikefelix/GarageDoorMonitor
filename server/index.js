@@ -2,7 +2,8 @@ var http = require("http"),
     url = require("url"),
     path = require("path"),
     request = require('request'),
-    wemo = require('wemo-client'),
+    Wemo = require('wemo-client'),
+    wemo = new Wemo(),
     exec = require('child_process').exec;
 
 if (!process.argv[4]){
@@ -14,6 +15,7 @@ var port = process.argv[2];
 var emailAddress = process.argv[3];
 var tesselAddress = process.argv[4];
 var authKey = process.argv[5];
+var lampClient;
 
 console.log("Process started at " + new Date());
 
@@ -106,7 +108,8 @@ http.createServer(function(req, response) {
                 });
             }
 
-            handleLights();
+            if (isNight())
+                handleLights(turnOnLight);
         }
         else {
             console.log('401 on open at ' + new Date());
@@ -118,6 +121,10 @@ http.createServer(function(req, response) {
             //console.dir(state);
             reply(response, state);
         });
+    }
+    else if (uri == '/lamp'){
+        handleLights(toggleLight);
+        reply(response, 'Toggling lamp.');
     }
     else if (uri == '/home'){ 
         console.log("Nest home at " + new Date());
@@ -144,25 +151,59 @@ function callTessel(uri, callback){
   });
 }
 
-function handleLights(){
-    for (var i = 0; i < 5; i++){
-        wemo.discover(function(deviceInfo){
-            if (deviceInfo) console.log(i + ": discovered device " + deviceInfo.friendlyName);
-            if (deviceInfo && deviceInfo.friendlyName == 'Lamp'){
-                i = 5;
-                var client = wemo.getClient(deviceInfo);
-                client.getBinaryState(function(err, state){
-                    if (err) {
-                        console.log("Error getting lamp state: " + err);
-                    }
-                    else if (state == 0){
-                        console.log("Turning on lamp.");
-                        client.setBinaryState(1);
-                    }
-                    else console.log("Lamp wasn't off.");
-                });
-            }
-        });
-    }
+function handleLights(action){
+    withLampClient(function(client){
+        action(client);
+    });
 }
 
+function withLampClient(action, attempt){
+    if (lampClient){
+        action(lampClient);
+        return;
+    }
+
+    attempt = attempt || 0;
+    wemo.discover(function(deviceInfo){
+        if (lampClient) return;
+
+        if (deviceInfo) console.log("Attempt " + attempt + ": discovered device " + deviceInfo.friendlyName);
+
+        if (deviceInfo && deviceInfo.friendlyName == 'Lamp'){
+            lampClient = wemo.client(deviceInfo);
+            action(lampClient);
+        }
+        /*else if (attempt < 10){
+            handleLights(action, attempt + 1);
+        }
+        else {
+            console.log("Could not find lamp after several attempts.");
+        }*/
+    });
+}
+
+function turnOnLight(client){ setLightState(client, 1); }
+function turnOffLight(client){ setLightState(client, 0); }
+function toggleLight(client){ setLightState(client); }
+function setLightState(client, newState){
+    client.getBinaryState(function(err, state){
+        if (err) {
+            console.log("Error getting lamp state: " + err);
+            lampClient = null;
+        }
+        else if (!newState){
+            console.log("Toggling lamp state from " + state + ".");
+            client.setBinaryState(state == 0 ? 1 : 0);
+        }
+        else if (state != newState){
+            console.log("Setting lamp to state " + newState + ".");
+            client.setBinaryState(newState);
+        }
+        else console.log("Lamp was already in state " + newState + ".");
+    });
+}
+
+function isNight(){
+    var date = new Date();
+    return date.getHours() < 6 || date.getHours() > 21;
+}
