@@ -84,11 +84,11 @@ function doorClosed(){
 }
 
 function doorOpened(){
-    sendAlert("opened" + (typeof keepOpen == 'number' ? keepOpen : ''));
     lastOpenTime = new Date();
     if (keepOpen === false)
         keepOpen = defaultAutoCloseMins;
 
+    sendAlert("opened" + keepOpen);
     resetCloseTimer();
 };
 

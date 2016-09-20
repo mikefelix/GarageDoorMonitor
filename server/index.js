@@ -141,14 +141,19 @@ http.createServer(function(req, response) {
 }).listen(8888);
 
 function callTessel(uri, callback){
-  request(tesselAddress + '/' + uri, function(err, res, body){
-      if (err){
-          callback("Error: " + err);
-      }
-      else {
-          callback(body);
-      }
-  });
+    try {
+        request(tesselAddress + '/' + uri, function(err, res, body){
+            if (err){
+                callback("Error: " + err);
+            }
+            else {
+                callback(body);
+            }
+        });
+    }
+    catch (e) {
+        console.log("Could not communicate with Tessel.");
+    }
 }
 
 function handleLights(action){
