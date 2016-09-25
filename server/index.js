@@ -152,7 +152,7 @@ function callTessel(uri, callback){
         });
     }
     catch (e) {
-        console.log("Could not communicate with Tessel.");
+        console.log("Could not communicate with Tessel: " + e);
     }
 }
 
@@ -170,20 +170,25 @@ function withLampClient(action, attempt){
 
     attempt = attempt || 0;
     wemo.discover(function(deviceInfo){
-        if (lampClient) return;
+        try {
+            if (lampClient) return;
 
-        if (deviceInfo) console.log("Attempt " + attempt + ": discovered device " + deviceInfo.friendlyName);
+            if (deviceInfo) console.log("Attempt " + attempt + ": discovered device " + deviceInfo.friendlyName);
 
-        if (deviceInfo && deviceInfo.friendlyName == 'Lamp'){
-            lampClient = wemo.client(deviceInfo);
-            action(lampClient);
+            if (deviceInfo && deviceInfo.friendlyName == 'Lamp'){
+                lampClient = wemo.client(deviceInfo);
+                action(lampClient);
+            }
+            /*else if (attempt < 10){
+                handleLights(action, attempt + 1);
+            }
+            else {
+                console.log("Could not find lamp after several attempts.");
+            }*/
+        } 
+        catch (e){
+            console.log("Can't discover devices: " + e);
         }
-        /*else if (attempt < 10){
-            handleLights(action, attempt + 1);
-        }
-        else {
-            console.log("Could not find lamp after several attempts.");
-        }*/
     });
 }
 
@@ -191,21 +196,27 @@ function turnOnLight(client){ setLightState(client, 1); }
 function turnOffLight(client){ setLightState(client, 0); }
 function toggleLight(client){ setLightState(client); }
 function setLightState(client, newState){
-    client.getBinaryState(function(err, state){
-        if (err) {
-            console.log("Error getting lamp state: " + err);
-            lampClient = null;
-        }
-        else if (!newState){
-            console.log("Toggling lamp state from " + state + ".");
-            client.setBinaryState(state == 0 ? 1 : 0);
-        }
-        else if (state != newState){
-            console.log("Setting lamp to state " + newState + ".");
-            client.setBinaryState(newState);
-        }
-        else console.log("Lamp was already in state " + newState + ".");
-    });
+    try {
+        client.getBinaryState(function(err, state){
+            if (err) {
+                console.log("Error getting lamp state: " + err);
+                lampClient = null;
+            }
+            else if (!newState){
+                console.log("Toggling lamp state from " + state + ".");
+                client.setBinaryState(state == 0 ? 1 : 0);
+            }
+            else if (state != newState){
+                console.log("Setting lamp to state " + newState + ".");
+                client.setBinaryState(newState);
+            }
+            else console.log("Lamp was already in state " + newState + ".");
+        });
+    }
+    catch (e) {
+        console.log("Can't communicate with Wemo: " + e);
+    }
+
 }
 
 function isNight(){

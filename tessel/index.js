@@ -216,8 +216,6 @@ http.createServer(function(request, response){
       }
       else {
           keepOpen = false;
-          reply(response, 404);
-          return;
       }
       
       if (!isOpen()){
