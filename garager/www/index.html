@@ -11,7 +11,7 @@
 <script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
 <script src="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
 <script>
-    var auth='h7geDG5gGG97q';
+    var auth='@@@auth@@@';
     var timeUntilClose = 0;
     var countdownTimeout;
     function countDown(){
@@ -79,6 +79,11 @@
                         countDown();
                 }
                 else {
+                    if (countdownTimeout) {
+                        clearTimeout(countdownTimeout);
+                        counddownTimeout = null;
+                    }
+
                     $('.time').html("No close time scheduled.");
                 }
 
