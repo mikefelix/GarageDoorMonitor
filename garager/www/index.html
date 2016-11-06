@@ -99,7 +99,7 @@
             $(".main").show();
         }).fail(function(){
             $('.state').html("unreachable! Network error");
-            $(".refresh").hide('Refresh');
+            //$(".refresh").hide('Refresh');
             $(".main").show();
         });
     }
@@ -122,7 +122,7 @@
         if (typeof time == 'number')
             t = time;
         else
-            t = '';
+            t = '0';
 
         $.get("http://mozzarelly.com/garage/open" + t + "?auth=" + auth, function(){
             setTimeout(refresh, 15000);
