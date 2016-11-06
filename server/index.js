@@ -43,6 +43,11 @@ function mail(subj, body){
     });
 }
 
+process.on('uncaughtException', function (err) {
+    console.error((new Date).toUTCString() + ' uncaughtException:', err.message);
+    console.error(err.stack);
+});
+
 http.createServer(function(req, response) {
     var uri = url.parse(req.url).pathname; 
 
@@ -164,7 +169,13 @@ function handleLights(action){
 
 function withLampClient(action, attempt){
     if (lampClient){
-        action(lampClient);
+        try {
+            action(lampClient);
+        } catch (e){
+            lampClient = null;
+            withLampClient(action, attempt);
+        }
+
         return;
     }
 
