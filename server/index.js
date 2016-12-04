@@ -4,6 +4,7 @@ var http = require("http"),
     request = require('request'),
     Wemo = require('wemo-client'),
     wemo = new Wemo(),
+    dash_button = require("node-dash-button"),
     exec = require('child_process').exec;
 
 if (!process.argv[4]){
@@ -11,6 +12,8 @@ if (!process.argv[4]){
     throw "Invalid usage";
 }
 
+var garageButtonMac = "50:f5:da:90:d1:fa";
+var dash = dash_button([garageButtonMac]);
 var port = process.argv[2]; 
 var emailAddress = process.argv[3];
 var tesselAddress = process.argv[4];
@@ -96,30 +99,7 @@ http.createServer(function(req, response) {
         }
     }
     else if (uri.match(/^\/open/)){ // call from user
-        if (new RegExp('auth=' + authKey).test(req.url)){
-            if (/open[0-9]+/.test(uri)){
-                var time = uri.match(/open([0-9]+)/)[1];
-                console.log('Open ' + time + ' command received at ' + new Date());
-                callTessel('open' + time, function(msg){
-                    console.log('Tessel replies: ' + msg);
-                    reply(response, msg);
-                });
-            }
-            else {
-                console.log('Open indefinitely command received at ' + new Date());
-                callTessel('open0', function(msg){
-                    console.log('Tessel replies: ' + msg);
-                    reply(response, msg);
-                });
-            }
-
-            if (isNight())
-                handleLights(turnOnLight);
-        }
-        else {
-            console.log('401 on open at ' + new Date());
-            reply(response, 401);
-        }
+        doOpen(req.url, false);
     }
     else if (uri == '/state'){ // call from user
         callTessel('state', function(state){
@@ -144,6 +124,37 @@ http.createServer(function(req, response) {
         reply(response, 404);
     }
 }).listen(8888);
+
+dash.on("detected", function (dash_id) {
+    doOpen('/open10', true);
+});
+
+function doOpen(uri, skipAuth){
+    if (skipAuth || new RegExp('auth=' + authKey).test(uri)){
+        if (/open[0-9]+/.test(uri)){
+            var time = uri.match(/open([0-9]+)/)[1];
+            console.log((skipAuth ? 'Button' : 'App') + ' open ' + time + ' command received at ' + new Date());
+            callTessel('open' + time, function(msg){
+                console.log('Tessel replies: ' + msg);
+                reply(response, msg);
+            });
+        }
+        else {
+            console.log('Open indefinitely command received at ' + new Date());
+            callTessel('open0', function(msg){
+                console.log('Tessel replies: ' + msg);
+                reply(response, msg);
+            });
+        }
+
+        if (isNight())
+            handleLights(turnOnLight);
+    }
+    else {
+        console.log('401 on open at ' + new Date());
+        reply(response, 401);
+    }
+}
 
 function callTessel(uri, callback){
     try {
