@@ -107,7 +107,13 @@ http.createServer(function(req, response) {
         }
     }
     else if (uri.match(/^\/open/)){ // call from user
-        doOpen(req.url, response, false);
+        if (new RegExp('auth=' + authKey).test(uri)){
+            doOpen(req.url, response);
+        }
+        else {
+            console.log('401 on open at ' + new Date());
+            reply(response, 401);
+        }
     }
     else if (uri == '/state'){ // call from user
         callTessel('state', function(state){
@@ -146,33 +152,28 @@ http.createServer(function(req, response) {
 
 dash.on("detected", function (dashId) {
     console.log("Detected connection by " + dashId);
-    doOpen('/open10', true);
+    doOpen('/open10');
 });
 
-function doOpen(uri, response, skipAuth){
-    if (skipAuth || new RegExp('auth=' + authKey).test(uri)){
-        if (/open[0-9]+/.test(uri)){
-            var time = uri.match(/open([0-9]+)/)[1];
-            console.log((skipAuth ? 'Button' : 'App') + ' open ' + time + ' command received at ' + new Date());
-            callTessel('open' + time, function(msg){
-                console.log('Tessel replies: ' + msg);
-                reply(response, msg);
-            });
-        }
-        else {
-            console.log('Open indefinitely command received at ' + new Date());
-            callTessel('open0', function(msg){
-                console.log('Tessel replies: ' + msg);
-                reply(response, msg);
-            });
-        }
-
-        if (isNight())
-            handleHue({breezeway: 180, garage: 180});
+function doOpen(uri, response){
+    if (/open[0-9]+/.test(uri)){
+        var time = uri.match(/open([0-9]+)/)[1];
+        console.log((!response ? 'Button' : 'App') + ' open ' + time + ' command received at ' + new Date());
+        callTessel('open' + time, function(msg){
+            console.log('Tessel replies: ' + msg);
+            if (response) reply(response, msg);
+        });
     }
     else {
-        console.log('401 on open at ' + new Date());
-        reply(response, 401);
+        console.log('Open indefinitely command received at ' + new Date());
+        callTessel('open0', function(msg){
+            console.log('Tessel replies: ' + msg);
+            if (response) reply(response, msg);
+        });
+    }
+
+    if (isNight()){
+        handleHue({breezeway: 180, garage: 180});
     }
 }
 
