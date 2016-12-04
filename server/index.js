@@ -18,6 +18,9 @@ var port = process.argv[2];
 var emailAddress = process.argv[3];
 var tesselAddress = process.argv[4];
 var authKey = process.argv[5];
+var hueKey = process.argv[6];
+var hueAddress = 'http://192.168.0.107/api/' + hueKey + '/lights';
+
 var lampClient;
 
 console.log("Process started at " + new Date());
@@ -108,7 +111,7 @@ http.createServer(function(req, response) {
         });
     }
     else if (uri == '/lamp'){
-        handleLights(toggleLight);
+        handleWemo(toggleLamp);
         reply(response, 'Toggling lamp.');
     }
     else if (uri == '/home'){ 
@@ -148,7 +151,7 @@ function doOpen(uri, skipAuth){
         }
 
         if (isNight())
-            handleLights(turnOnLight);
+            handleHue({breezeway: 180, garage: 180});
     }
     else {
         console.log('401 on open at ' + new Date());
@@ -172,7 +175,38 @@ function callTessel(uri, callback){
     }
 }
 
-function handleLights(action){
+function handleHue(ops){
+    for (var kind in ops){
+        if (ops.hasOwnProperty(kind)){
+            var state = ops[kind];
+            var bulb = kind == 'garage' ? 1 : 2;
+            if (typeof state == 'number'){
+                hueRequest(bulb, true, state * 1000);
+            }
+            else {
+                hueRequest(bulb, state);
+            }
+        }
+    }
+}
+
+function hueRequest(bulb, on, timeout){
+    console.log(hueAddress + '/' + bulb + '/state');
+    request.put({
+          headers: {'content-type' : 'application/json'},
+          url:     hueAddress + '/' + bulb + '/state',
+          body:    JSON.stringify({on:on})
+    }, function(err, res, body){
+       if (err){
+           console.log('Hue error: ' + err);
+       }
+       else if (timeout){
+           setTimeout(function(){hueRequest(bulb, false)}, timeout);
+       }
+    });
+}
+
+function handleWemo(action){
     withLampClient(function(client){
         action(client);
     });
@@ -202,7 +236,7 @@ function withLampClient(action, attempt){
                 action(lampClient);
             }
             /*else if (attempt < 10){
-                handleLights(action, attempt + 1);
+                handleWemo(action, attempt + 1);
             }
             else {
                 console.log("Could not find lamp after several attempts.");
@@ -214,10 +248,10 @@ function withLampClient(action, attempt){
     });
 }
 
-function turnOnLight(client){ setLightState(client, 1); }
-function turnOffLight(client){ setLightState(client, 0); }
-function toggleLight(client){ setLightState(client); }
-function setLightState(client, newState){
+function turnOnLamp(client){ setLampState(client, 1); }
+function turnOffLamp(client){ setLampState(client, 0); }
+function toggleLamp(client){ setLampState(client); }
+function setLampState(client, newState){
     try {
         client.getBinaryState(function(err, state){
             if (err) {
@@ -238,10 +272,9 @@ function setLightState(client, newState){
     catch (e) {
         console.log("Can't communicate with Wemo: " + e);
     }
-
 }
 
 function isNight(){
     var date = new Date();
-    return date.getHours() < 6 || date.getHours() > 21;
+    return date.getHours() < 7 || date.getHours() > 18;
 }
