@@ -107,7 +107,7 @@ http.createServer(function(req, response) {
         }
     }
     else if (uri.match(/^\/open/)){ // call from user
-        doOpen(req.url, false);
+        doOpen(req.url, response, false);
     }
     else if (uri == '/state'){ // call from user
         callTessel('state', function(state){
@@ -144,11 +144,12 @@ http.createServer(function(req, response) {
     }
 }).listen(8888);
 
-dash.on("detected", function (dash_id) {
+dash.on("detected", function (dashId) {
+    console.log("Detected connection by " + dashId);
     doOpen('/open10', true);
 });
 
-function doOpen(uri, skipAuth){
+function doOpen(uri, response, skipAuth){
     if (skipAuth || new RegExp('auth=' + authKey).test(uri)){
         if (/open[0-9]+/.test(uri)){
             var time = uri.match(/open([0-9]+)/)[1];
