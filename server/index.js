@@ -294,7 +294,7 @@ function setWemoState(client, newState){
 
 function isNight(){
     var date = new Date();
-    if (date.getHours() < 7 || date.getHours() > 17){
+    if (date.getHours() < 7 || date.getHours() > 16){
         console.log("It is night!");
         return true;
     }
