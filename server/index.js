@@ -20,9 +20,13 @@ var tesselAddress = process.argv[4];
 var authKey = process.argv[5];
 var hueKey = process.argv[6];
 var pushoverKey = process.argv[7];
-var hueAddress = 'http://192.168.0.109/api/' + hueKey + '/lights';
+var hueAddress = 'http://192.168.0.115/api/' + hueKey + '/lights';
 
-var wemoClient;
+var wemoClient = {};
+var hueBulbs = {
+    garage: 1,
+    breezeway: 2
+};
 
 console.log("Process started at " + new Date());
 
@@ -56,7 +60,7 @@ process.on('uncaughtException', function (err) {
 });
 
 http.createServer(function(req, response) {
-    var uri = url.parse(req.url).pathname; 
+    var uri = req.url;
 
     if (uri == '/warn1'){
         console.log("Send warning 1 at " + new Date());
@@ -121,9 +125,21 @@ http.createServer(function(req, response) {
             reply(response, state);
         });
     }
+    else if (uri == '/aquarium'){
+        handleWemo('Aquarium', toggleWemoDevice);
+        reply(response, 'Toggling aquarium.');
+    }
     else if (uri == '/lamp'){
         handleWemo('Lamp', toggleWemoDevice);
         reply(response, 'Toggling lamp.');
+    }
+    else if (uri == '/breezeway'){
+        handleHue({'breezeway': true});
+        reply(response, "Toggled breezeway.");
+    }
+    else if (uri == '/garage'){
+        handleHue({'garage': true});
+        reply(response, "Toggled garage.");
     }
     else if (uri == '/home'){ 
         console.log("Nest home at " + new Date());
@@ -136,9 +152,17 @@ http.createServer(function(req, response) {
     else if (uri.match(/^\/light/)){ // call from user
         if (/light_[a-z0-9]+/.test(uri)){
             var light = uri.match(/light_([a-z0-9]+)/)[1]; 
-            var ops = {};
-            ops[light] = true;
-            handleHue(ops);
+            if (light == 'breezeway' || light == 'garage'){
+                toggleHueBulb(light);
+                reply(response, 200);
+            }
+            else if (light == 'aquarium' || light == 'lamp'){
+                handleWemo(light.substring(0, 1).toUpperCase() + light.substring(1), toggleWemoDevice);
+                reply(response, 200);
+            }
+            else {
+                reply(response, 404);
+            }
         }
         else {
             reply(response, 404);
@@ -215,6 +239,21 @@ function handleHue(ops){
     }
 }
 
+function toggleHueBulb(bulb) {
+    request.get({
+      headers: {'content-type' : 'application/json'},
+      url: hueAddress + '/' + bulb
+    }, function(err, res, body){
+        if (err)
+            console.log("Error getting bulb state: " + err);
+        else {
+            console.log("body: " + body);
+            var on = body && /"on": ?true/.test(body);
+            hueRequest(bulb, !on);
+        }
+    });
+}
+
 function hueRequest(bulb, on, timeout){
     console.log('Setting bulb ' + bulb + ' to ' + (on ? 'on' : 'off') + ' at ' + new Date());
     request.put({
@@ -238,11 +277,11 @@ function handleWemo(device, action){
 }
 
 function withWemoClient(device, action, attempt){
-    if (wemoClient){
+    if (wemoClient[device]){
         try {
-            action(wemoClient);
+            action(wemoClient[device]);
         } catch (e){
-            wemoClient = null;
+            delete wemoClient[device];
             withWemoClient(device, action, attempt);
         }
 
@@ -256,8 +295,8 @@ function withWemoClient(device, action, attempt){
                 console.log("Attempt " + attempt + ": discovered device " + deviceInfo.friendlyName);
 
             if (deviceInfo && deviceInfo.friendlyName == device){
-                wemoClient = wemo.client(deviceInfo);
-                action(wemoClient);
+                wemoClient[device] = wemo.client(deviceInfo);
+                action(wemoClient[device]);
             }
         } 
         catch (e){
@@ -274,9 +313,9 @@ function setWemoState(client, newState){
         client.getBinaryState(function(err, state){
             if (err) {
                 console.log("Error getting wemo state: " + err);
-                wemoClient = null;
+                delete wemoClient[device];
             }
-            else if (!newState){
+            else if (newState === undefined){
                 console.log("Toggling wemo state from " + state + ".");
                 client.setBinaryState(state == 0 ? 1 : 0);
             }
