@@ -110,9 +110,19 @@
         $(".time5").click(function(){open(5)});
         $(".time10").click(function(){open(10)});
         $(".timeinf").click(function(){open});
+        $(".light-lamp").click(function(){toggle('lamp')});
+        $(".light-garage").click(function(){toggle('garage')});
+        $(".light-breezeway").click(function(){toggle('breezeway')});
+        $(".light-aquarium").click(function(){toggle('aquarium')});
         $(".close").click(close);
         refresh();
     });
+
+    function toggle(light){
+        $.get("http://mozzarelly.com/garage/light_" + light + "?auth=" + auth, function(){
+            setTimeout(refresh, 15000);
+        });
+    }
 
     function open(time){
         $('.time').html('Opening...');
@@ -146,29 +156,42 @@
 <body>
 
 <div data-role="page" id="pageone">
-  <div data-role="header">
-    <h1>Garage</h1>
-  </div>
+    <div data-role="header">
+        <h1>Garage</h1>
+    </div>
 
-  <div data-role="main" class="main ui-content" style="display:none">
-    Garage is <span class="state"></span>.
-    <span class="time"></span>
-    <div class="lastopen"></div>
-    <div class="lastclose"></div>
-    <a class="open time1 ui-btn">Open for 1 minute</a>
-    <a class="open time5 ui-btn">Open for 5 minutes</a>
-    <a class="open time10 ui-btn">Open for 10 minutes</a>
-    <a class="open timeinf ui-btn">Open indefinitely</a>
-    <a class="close ui-btn">Close</a>
-  </div>
-  <div class="ui-content">
-    <a class="refresh ui-btn">Refresh</a>
-  </div>
-  <div class="ui-content">
-    <div class="current"></div>
-  </div>
+    <div data-role="main" class="main ui-content" style="display:none">
+        Garage: <span class="state"></span>
+        <span class="time"></span>
+        <div class="ui-content">
+            <a class="open time1 ui-btn">Open 1 min</a>
+            <a class="open time5 ui-btn">Open 5 min</a>
+        <!--</div>-->
+        <!--<div class="ui-content">-->
+            <a class="open time10 ui-btn">Open 10 min</a>
+            <a class="open timeinf ui-btn">Open &infin;</a>
+            <a class="close ui-btn">Close</a>
+        </div>
+        Lights
+        <div class="ui-content">
+            <a class="light-garage ui-btn">Garage</a>
+            <a class="light-breezeway ui-btn">Breezeway</a>
+            <a class="light-lamp ui-btn">Lamp</a>
+            <a class="light-aquarium ui-btn">Aquarium</a>
+        </div>
+        <div class="ui-content">
+            <a class="refresh ui-btn">Refresh</a>
+        </div>
+        <div class="ui-content">
+            <div class="current"></div>
+            <div class="lastopen"></div>
+            <div class="lastclose"></div>
+        </div>
+    </div>
 
 </div>
+
+
 
 </body>
 </html>

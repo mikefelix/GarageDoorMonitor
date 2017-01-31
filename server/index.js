@@ -21,6 +21,7 @@ var authKey = process.argv[5];
 var hueKey = process.argv[6];
 var pushoverKey = process.argv[7];
 var hueAddress = 'http://192.168.0.115/api/' + hueKey + '/lights';
+var currentWeatherUri = 'http://mozzarelly.com/weather/current';
 
 var wemoClient = {};
 var hueBulbs = {
@@ -86,9 +87,7 @@ http.createServer(function(req, response) {
         if (uri.match(/[0-9]+/))
             t = uri.match(/[0-9]+/)[0];
 
-        if (isNight()){
-            handleHue({breezeway: 180, garage: 180});
-        }
+        handleHue({ifNight: true, breezeway: 180, garage: 180});
 
         console.log('Tessel reports opened ' + t + ' state at ' + new Date());
         reply(response, "opened alert received");
@@ -97,7 +96,7 @@ http.createServer(function(req, response) {
         console.log('Tessel reports closed state at ' + new Date());
         reply(response, "closed alert received");
     }
-    else if (uri == '/close'){ // call from user
+    else if (uri.match(/^\/close/)){ // call from user
         if (new RegExp('auth=' + authKey).test(req.url)){
             console.log('Close command received at ' + new Date());
             callTessel('close', function(msg){
@@ -153,7 +152,7 @@ http.createServer(function(req, response) {
         if (/light_[a-z0-9]+/.test(uri)){
             var light = uri.match(/light_([a-z0-9]+)/)[1]; 
             if (light == 'breezeway' || light == 'garage'){
-                toggleHueBulb(light);
+                toggleHueBulb(hueBulbs[light]);
                 reply(response, 200);
             }
             else if (light == 'aquarium' || light == 'lamp'){
@@ -176,7 +175,19 @@ http.createServer(function(req, response) {
 
 dash.on("detected", function (dashId) {
     console.log("Detected connection by " + dashId);
-    doOpen('/open10');
+    callTessel('state', function(state){
+        if (!state) {
+            console.log("No state retrieved.");
+        }
+        else if (state.is_open){
+            console.log("Closing for dash");
+            callTessel('close', function(){});
+        }
+        else {
+            console.log("Opening for dash");
+            doOpen('/open10');
+        }
+    });
 });
 
 function doOpen(uri, response){
@@ -196,9 +207,7 @@ function doOpen(uri, response){
         });
     }
 
-    if (isNight()){
-        handleHue({breezeway: 180, garage: 180});
-    }
+    handleHue({ifNight: true, breezeway: 180, garage: 180});
 }
 
 function callTessel(uri, callback){
@@ -218,25 +227,30 @@ function callTessel(uri, callback){
 }
 
 function handleHue(ops){
-    for (var kind in ops){
-        if (ops.hasOwnProperty(kind)){
-            var state = ops[kind];
-            var bulb; 
-            if (kind == 'garage')
-                bulb = 1;
-            else if (kind == 'breezeway')
-                bulb = 2;
-            else
-                throw 'Unknown light ' + kind;
+    var doMaybe = ops.ifNight !== undefined ? doIfNight : function(cb){cb()};
+    console.log('Handle hue lights. Care about night? ' + ops.ifNight);
 
-            if (typeof state == 'number'){
-                hueRequest(bulb, true, state * 1000);
-            }
-            else {
-                hueRequest(bulb, state);
+    doMaybe(function(){
+        for (var kind in ops){
+            if (ops.hasOwnProperty(kind) && kind != 'ifNight'){
+                var state = ops[kind];
+                var bulb; 
+                if (kind == 'garage')
+                    bulb = 1;
+                else if (kind == 'breezeway')
+                    bulb = 2;
+                else
+                    throw 'Unknown light ' + kind;
+
+                if (typeof state == 'number'){
+                    hueRequest(bulb, true, state * 1000);
+                }
+                else {
+                    hueRequest(bulb, state);
+                }
             }
         }
-    }
+    });
 }
 
 function toggleHueBulb(bulb) {
@@ -244,10 +258,10 @@ function toggleHueBulb(bulb) {
       headers: {'content-type' : 'application/json'},
       url: hueAddress + '/' + bulb
     }, function(err, res, body){
-        if (err)
+        if (err){
             console.log("Error getting bulb state: " + err);
+        } 
         else {
-            console.log("body: " + body);
             var on = body && /"on": ?true/.test(body);
             hueRequest(bulb, !on);
         }
@@ -331,14 +345,28 @@ function setWemoState(client, newState){
     }
 }
 
-function isNight(){
+function doIfNight(doThis){
+    request(currentWeatherUri, function(err, res, body){
+        if (err){
+            console.log('Error calling for isNight: ' + err);
+            if (isNightFallback()){
+                console.log("Is night (by fallback).");
+                doThis();
+            }
+            else console.log("Is day (by fallback).");
+        }
+        else {
+            var json = JSON.parse(body);
+            if (json.night == 'true' || json.night == true){
+                console.log("Is night.");
+                doThis();
+            }
+            else console.log("Is day.");
+        }
+    });
+}
+
+function isNightFallback(){
     var date = new Date();
-    if (date.getHours() < 7 || date.getHours() > 16){
-        console.log("It is night!");
-        return true;
-    }
-    else {
-        console.log("It's still day.");
-        return false;
-    }
+    return date.getHours() < 7 || date.getHours() > 16;
 }
