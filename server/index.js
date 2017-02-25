@@ -5,6 +5,7 @@ var http = require("http"),
     Wemo = require('wemo-client'),
     wemo = new Wemo(),
     dash_button = require("node-dash-button"),
+    suncalc = require("suncalc"),
     exec = require('child_process').exec;
 
 if (!process.argv[4]){
@@ -29,7 +30,12 @@ var hueBulbs = {
     breezeway: 2
 };
 
-console.log("Process started at " + new Date());
+console.log("Process started.");
+
+function getSunTimes(){
+   var times = suncalc.getTimes(new Date(), 40.7608, -111.891);
+   return {sunrise: times.sunrise, sunset: times.sunsetStart};
+}
 
 function reply(res, msg){
     if (typeof msg == 'number'){
@@ -87,7 +93,7 @@ http.createServer(function(req, response) {
         if (uri.match(/[0-9]+/))
             t = uri.match(/[0-9]+/)[0];
 
-        handleHue({ifNight: true, breezeway: 180, garage: 180});
+        handleHue({breezeway: 180, garage: 180}, true);
 
         console.log('Tessel reports opened ' + t + ' state at ' + new Date());
         reply(response, "opened alert received");
@@ -118,10 +124,35 @@ http.createServer(function(req, response) {
             reply(response, 401);
         }
     }
+    else if (uri == '/time'){ // call from user
+        var sun = getSunTimes();
+        var state = {
+            is_night: isNight(), 
+            sunrise: sun.sunrise,
+            sunset: sun.sunset,
+            current: new Date()
+        };
+        reply(response, state);
+    }
     else if (uri == '/state'){ // call from user
-        callTessel('state', function(state){
-            //console.dir(state);
-            reply(response, state);
+        callTessel('state', function(tesselState){
+            var state = JSON.parse(tesselState);
+            state.is_night = isNight();
+            withHueState(function(err, hueState){
+                state.bulbs = err ? {hueError: err} : hueState;
+                withWemoClient('Lamp', function(lampClient){
+                    withWemoClient('Aquarium', function(aquaClient){
+                        lampClient.getBinaryState(function(lampErr, lampState){
+                            aquaClient.getBinaryState(function(aquaErr, aquaState){
+                                state.bulbs.lamp = lampErr ? lampErr : (lampState == 1);
+                                state.bulbs.aquarium = aquaErr ? aquaErr : (aquaState == 1);
+
+                                reply(response, state);
+                            });
+                        });
+                    });
+                });
+            });
         });
     }
     else if (uri == '/aquarium'){
@@ -207,7 +238,7 @@ function doOpen(uri, response){
         });
     }
 
-    handleHue({ifNight: true, breezeway: 180, garage: 180});
+    handleHue({breezeway: 180, garage: 180}, true);
 }
 
 function callTessel(uri, callback){
@@ -226,13 +257,11 @@ function callTessel(uri, callback){
     }
 }
 
-function handleHue(ops){
-    var doMaybe = ops.ifNight !== undefined ? doIfNight : function(cb){cb()};
-    console.log('Handle hue lights. Care about night? ' + ops.ifNight);
-
-    doMaybe(function(){
+function handleHue(ops, ifNight){
+    console.log('Handle hue lights' + (ifNight ? ' if it is night' : '') + '.');
+    if (!ifNight || isNight()){
         for (var kind in ops){
-            if (ops.hasOwnProperty(kind) && kind != 'ifNight'){
+            if (ops.hasOwnProperty(kind)){
                 var state = ops[kind];
                 var bulb; 
                 if (kind == 'garage')
@@ -249,6 +278,33 @@ function handleHue(ops){
                     hueRequest(bulb, state);
                 }
             }
+        }
+    }
+}
+
+function withHueState(cb){
+    request.get({
+      headers: {'content-type' : 'application/json'},
+      url: hueAddress + '/1'
+    }, function(err1, res1, body1){
+        if (err1){
+            console.log("Error getting garage bulb state: " + err1);
+            cb(err1);
+        } 
+        else {
+            var on1 = body1 && /"on": ?true/.test(body1);
+            request.get({
+                headers: {'content-type' : 'application/json'},
+                url: hueAddress + '/2'
+            }, function(err2, res2, body2){
+                if (err2){
+                    console.log("Error getting garage bulb state: " + err2);
+                    cb(err2);
+                }
+
+                var on2 = body2 && /"on": ?true/.test(body2);
+                cb(null, {garage: on1, breezeway: on2});
+            });
         }
     });
 }
@@ -345,28 +401,22 @@ function setWemoState(client, newState){
     }
 }
 
-function doIfNight(doThis){
-    request(currentWeatherUri, function(err, res, body){
-        if (err){
-            console.log('Error calling for isNight: ' + err);
-            if (isNightFallback()){
-                console.log("Is night (by fallback).");
-                doThis();
-            }
-            else console.log("Is day (by fallback).");
-        }
-        else {
-            var json = JSON.parse(body);
-            if (json.night == 'true' || json.night == true){
-                console.log("Is night.");
-                doThis();
-            }
-            else console.log("Is day.");
-        }
-    });
-}
-
-function isNightFallback(){
+function isNight(){
     var date = new Date();
-    return date.getHours() < 7 || date.getHours() > 16;
+    var times = getSunTimes();
+    var sunrise = times.sunrise;
+    var sunset = times.sunset;
+
+    //console.log('sunrise: ' + sunrise);
+    //console.log('sunset: ' + sunset);
+    //console.log('now: ' + date);
+
+    if (date < sunrise || date > sunset){
+        //console.log('I conclude that it is night.');
+        return true;
+    }
+    else {
+        //console.log('I conclude that it is day.');
+        return false;
+    }
 }
