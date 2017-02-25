@@ -45,6 +45,15 @@
             return date;
     }
 
+    function lightText(bulb, state){
+        var ind;
+        if (state === true) ind = 'on';
+        else if (state === false) ind = 'off';
+        else ind = '...';    
+
+        $('.light-' + bulb).html(bulb.substr(0, 1).toUpperCase() + bulb.substr(1) + ' (' + ind + ')');
+    }
+
     function refresh(){
         $('.main').hide();
         $('.refresh').html('Refreshing...');
@@ -69,7 +78,7 @@
             if (state.bulbs){
                 for (var bulb in state.bulbs){
                     if (state.bulbs.hasOwnProperty(bulb)){
-                        $('.light-' + bulb).html(bulb.substr(0, 1).toUpperCase() + bulb.substr(1) + ' (' + (state.bulbs[bulb] ? 'on' : 'off') + ')');
+                        lightText(bulb, state.bulbs[bulb]);
                     }
                 }
             }
@@ -132,8 +141,10 @@
     }
 
     function toggle(light){
+        lightText(light);
         $.get("http://mozzarelly.com/garage/light_" + light + "?auth=" + auth, function(){
-            setTimeout(refresh, 15000);
+            //setTimeout(refresh, 15000);
+            refresh();
         });
     }
 
