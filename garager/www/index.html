@@ -51,7 +51,6 @@
         $.get("http://mozzarelly.com/garage/state", function( data ) {
             //data = '{"is_open":true,"last_open_time":"2016-08-27T17:36:34.654Z","last_close_time":"2016-08-27T18:48:48.534Z","next_close_time":"2016-08-27T18:59:59.743Z","close_attempts":0,"current_time":"2016-08-27T18:57:57.743Z"}';
             var state = JSON.parse(data);
-            console.dir(state);
             if (state.last_open_time){
                 var date = formatTime(state.last_open_time);
                 $('.lastopen').html('Last opened: ' + date);
@@ -65,6 +64,14 @@
             if (state.current_time){
                 var date = formatTime(state.current_time);
                 $('.current').html('Current time: ' + date);
+            }
+
+            if (state.bulbs){
+                for (var bulb in state.bulbs){
+                    if (state.bulbs.hasOwnProperty(bulb)){
+                        $('.light-' + bulb).html(bulb.substr(0, 1).toUpperCase() + bulb.substr(1) + ' (' + (state.bulbs[bulb] ? 'on' : 'off') + ')');
+                    }
+                }
             }
 
             $(".state").html(state.is_open ? "open" : "closed");
@@ -109,14 +116,20 @@
         $(".time1").click(function(){open(1)});
         $(".time5").click(function(){open(5)});
         $(".time10").click(function(){open(10)});
-        $(".timeinf").click(function(){open});
+        $(".timeinf").click(function(){open()});
         $(".light-lamp").click(function(){toggle('lamp')});
         $(".light-garage").click(function(){toggle('garage')});
         $(".light-breezeway").click(function(){toggle('breezeway')});
         $(".light-aquarium").click(function(){toggle('aquarium')});
         $(".close").click(close);
+
+        $(".light-garage").html('Breezeway ' + getLightState('breezeway'));
         refresh();
     });
+
+    function getLightState(bulb){
+
+    }
 
     function toggle(light){
         $.get("http://mozzarelly.com/garage/light_" + light + "?auth=" + auth, function(){
@@ -157,11 +170,11 @@
 
 <div data-role="page" id="pageone">
     <div data-role="header">
-        <h1>Garage</h1>
+        <h1>Home</h1>
     </div>
 
     <div data-role="main" class="main ui-content" style="display:none">
-        Garage: <span class="state"></span>
+        Garage: <span class="state"></span>.
         <span class="time"></span>
         <div class="ui-content">
             <a class="open time1 ui-btn">Open 1 min</a>
