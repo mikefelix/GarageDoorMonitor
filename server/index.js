@@ -23,6 +23,7 @@ var hueKey = process.argv[6];
 var pushoverKey = process.argv[7];
 var hueAddress = 'http://192.168.0.115/api/' + hueKey + '/lights';
 var currentWeatherUri = 'http://mozzarelly.com/weather/current';
+var lampForced = false;
 
 var wemoClient = {};
 var hueBulbs = {
@@ -30,23 +31,76 @@ var hueBulbs = {
     breezeway: 2
 };
 
+checkLamp();
+
 console.log("Process started.");
 
+function checkLamp(){
+    var date = new Date();
+    var sunTimes = getSunTimes();
+
+    if (lampForced && date.getHours() == 4){
+        lampForced = false;
+    }
+
+    withWemoClient('Lamp', function(lampClient){
+        lampClient.getBinaryState(function(lampErr, lampState){
+            var afterSunset = (date.getTime() > sunTimes.lampOn.getTime());
+            var afterSunrise = (date.getTime() > sunTimes.lampOff.getTime());
+            lampState = lampState == 1 ? true : false;
+
+            if (lampErr) {
+                console.log(lampErr);
+            }
+            else if (lampForced){
+                console.log('Leaving the lamp alone for now.');
+            }
+            else if (!lampState && afterSunset){
+                console.log('Turn on lamp at ' + date);
+                lampForced = false;
+                handleWemo('Lamp', turnOnWemoDevice);
+            }
+            else if (lampState && afterSunrise){
+                console.log('Turn off lamp at ' + date);
+                lampForced = false;
+                handleWemo('Lamp', turnOffWemoDevice);
+            }
+        });
+    });
+
+    setTimeout(checkLamp, 60000);
+}
+
 function getSunTimes(){
-   var times = suncalc.getTimes(new Date(), 40.7608, -111.891);
-   return {sunrise: times.sunrise, sunset: times.sunsetStart};
+    var date = new Date();
+    var times = suncalc.getTimes(date, 40.7608, -111.891);
+    var elevenPm = date;
+    elevenPm.setHours(23);
+    elevenPm.setMinutes(30);
+
+    return {
+        sunrise: times.sunrise, 
+        sunset: times.sunsetStart,
+        lampOn: new Date(times.sunsetStart.getTime() - (1000 * 60 * 20)),
+        lampOff: elevenPm
+    };
 }
 
 function reply(res, msg){
+    var headers = {
+        'Content-type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+    };
+
     if (typeof msg == 'number'){
-        res.writeHead(msg);
+        res.writeHead(msg, headers);
     }
     else if (typeof msg == 'object'){
-        res.writeHead(200);
+        res.writeHead(200, headers);
         res.write(JSON.stringify(msg));
     }
     else if (typeof msg == 'string'){
-        res.writeHead(200);
+        res.writeHead(200, headers);
         res.write(msg);
     }
 
@@ -118,6 +172,7 @@ http.createServer(function(req, response) {
     else if (uri.match(/^\/open/)){ // call from user
         if (new RegExp('auth=' + authKey).test(uri)){
             doOpen(req.url, response);
+            reply(response, 200);
         }
         else {
             console.log('401 on open at ' + new Date());
@@ -160,6 +215,7 @@ http.createServer(function(req, response) {
         reply(response, 'Toggling aquarium.');
     }
     else if (uri == '/lamp'){
+        lampForced = true;
         handleWemo('Lamp', toggleWemoDevice);
         reply(response, 'Toggling lamp.');
     }
