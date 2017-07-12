@@ -6,6 +6,7 @@ var http = require("http"),
     wemo = new Wemo(),
     dash_button = require("node-dash-button"),
     suncalc = require("suncalc"),
+    moment = require("moment-timezone"),
     exec = require('child_process').exec;
 
 if (!process.argv[4]){
@@ -23,7 +24,7 @@ var hueKey = process.argv[6];
 var pushoverKey = process.argv[7];
 var hueAddress = 'http://192.168.0.115/api/' + hueKey + '/lights';
 var currentWeatherUri = 'http://mozzarelly.com/weather/current';
-var lampForced = false;
+var lampForced = false, outerLightsForced = false;
 
 var wemoClient = {};
 var hueBulbs = {
@@ -33,8 +34,49 @@ var hueBulbs = {
 
 checkLamp();
 
-console.log("Process started.");
+console.log("Process started. Times for today:");
+getSunTimes(true);
 
+// TODO: make this work
+function checkOuterLights(){
+    var date = new Date();
+    var sunTimes = getSunTimes();
+
+    if (outerLightsForced && date.getHours() == 9){
+        outerLightsForced = false;
+    }
+
+    withHueState(function(err, hueState){
+        console.log('here is the hue state:')
+        console.dir(hueState)
+        var afterOuterOff = (date.getTime() > sunTimes.sunrise.getTime());
+        var lampState = !!(hueState.driveway || hueState.breezeway || hueState.garage);
+
+        if (lampErr) {
+            console.log(lampErr);
+        }
+        else if (!outerLightsForced){
+            if (!lampState && afterLampOn && !afterLampOff){
+                console.log('Turn on lamp because current time', 
+                    format(date), 
+                    'is after lampOn time',
+                    format(sunTimes.lampOn),
+                    'and not after lampOff time',
+                    format(sunTimes.lampOff));
+
+                lampForced = false;
+                handleWemo('Lamp', turnOnWemoDevice);
+            }
+            else if (lampState && afterLampOff){
+                console.log('Turn off lamp at ' + format(date));
+                lampForced = false;
+                handleWemo('Lamp', turnOffWemoDevice);
+            }
+        }
+    });
+
+    setTimeout(checkLamp, 60000);
+}
 function checkLamp(){
     var date = new Date();
     var sunTimes = getSunTimes();
@@ -45,25 +87,34 @@ function checkLamp(){
 
     withWemoClient('Lamp', function(lampClient){
         lampClient.getBinaryState(function(lampErr, lampState){
-            var afterSunset = (date.getTime() > sunTimes.lampOn.getTime());
-            var afterSunrise = (date.getTime() > sunTimes.lampOff.getTime());
+            var afterLampOn = (date.getTime() > sunTimes.lampOn.getTime());
+            var afterLampOff = (date.getTime() > sunTimes.lampOff.getTime());
             lampState = lampState == 1 ? true : false;
+
+            //console.log('Lamp state is', lampState, '; afterLampOn is', afterLampOn, '; afterLampOff is', afterLampOff);
+            //console.log('lampOn', sunTimes.lampOn.getTime(), format(sunTimes.lampOn));
+            //console.log('lampOff', sunTimes.lampOff.getTime(), format(sunTimes.lampOff));
 
             if (lampErr) {
                 console.log(lampErr);
             }
-            else if (lampForced){
-                console.log('Leaving the lamp alone for now.');
-            }
-            else if (!lampState && afterSunset){
-                console.log('Turn on lamp at ' + date);
-                lampForced = false;
-                handleWemo('Lamp', turnOnWemoDevice);
-            }
-            else if (lampState && afterSunrise){
-                console.log('Turn off lamp at ' + date);
-                lampForced = false;
-                handleWemo('Lamp', turnOffWemoDevice);
+            else if (!lampForced){
+                if (!lampState && afterLampOn && !afterLampOff){
+                    console.log('Turn on lamp because current time', 
+                        format(date), 
+                        'is after lampOn time',
+                        format(sunTimes.lampOn),
+                        'and not after lampOff time',
+                        format(sunTimes.lampOff));
+
+                    lampForced = false;
+                    handleWemo('Lamp', turnOnWemoDevice);
+                }
+                else if (lampState && afterLampOff){
+                    console.log('Turn off lamp at ' + format(date));
+                    lampForced = false;
+                    handleWemo('Lamp', turnOffWemoDevice);
+                }
             }
         });
     });
@@ -71,19 +122,37 @@ function checkLamp(){
     setTimeout(checkLamp, 60000);
 }
 
-function getSunTimes(){
-    var date = new Date();
+function getSunTimes(log){
+    var tz = 'America/Denver';
+    var date = moment();
     var times = suncalc.getTimes(date, 40.7608, -111.891);
-    var elevenPm = date;
-    elevenPm.setHours(23);
-    elevenPm.setMinutes(30);
+    var sr = moment(Date.parse(times.sunrise));
+    sr.date(date.date());
+    var sunrise = new Date(sr); 
+    var ss = moment(Date.parse(times.sunsetStart));
+    ss.date(date.date());
+    var sunset = new Date(ss);
+    var lampOn = new Date(sunset.getTime() - (1000 * 60 * 30));
+    var elevenThirtyPm = date.startOf('day').add(23, 'hours').add(30, 'minutes').toDate();
+    //var sevenThirtyPm = date.startOf('day').add(20, 'hours').add(30, 'minutes').toDate();
 
-    return {
-        sunrise: times.sunrise, 
-        sunset: times.sunsetStart,
-        lampOn: new Date(times.sunsetStart.getTime() - (1000 * 60 * 20)),
-        lampOff: elevenPm
+    var ret = {
+        retrieved: new Date(),
+        sunrise: sunrise,
+        sunset: sunset,
+        lampOn: lampOn,//sevenThirtyPm,
+        lampOff: elevenThirtyPm
     };
+
+    if (log) {
+        console.log('Current time is: ' + format(ret.retrieved));
+        console.log('Sunrise time is: ' + format(ret.sunrise));
+        console.log('Lamp on time is: ' + format(ret.lampOn));
+        console.log('Sunset time is: ' + format(ret.sunset));
+        console.log('Lamp off time is: ' + format(ret.lampOff));
+    }
+
+    return ret;
 }
 
 function reply(res, msg){
@@ -97,14 +166,19 @@ function reply(res, msg){
     }
     else if (typeof msg == 'object'){
         res.writeHead(200, headers);
-        res.write(JSON.stringify(msg));
+        res.end(JSON.stringify(msg));
     }
     else if (typeof msg == 'string'){
         res.writeHead(200, headers);
-        res.write(msg);
+        res.end(msg);
     }
 
     res.end();
+}
+
+function format(date, noQuotes){
+    var q = noQuotes ? '' : '"'
+    return q + moment(date).format("dddd, MMMM Do YYYY, h:mm:ss a") + q;
 }
 
 function mail(subj, body){
@@ -122,6 +196,7 @@ process.on('uncaughtException', function (err) {
 
 http.createServer(function(req, response) {
     var uri = req.url;
+    console.log('Received call at ' + format(new Date()) + ': ' + uri);
 
     if (uri == '/warn1'){
         console.log("Send warning 1 at " + new Date());
@@ -147,7 +222,7 @@ http.createServer(function(req, response) {
         if (uri.match(/[0-9]+/))
             t = uri.match(/[0-9]+/)[0];
 
-        handleHue({breezeway: 180, garage: 180}, true);
+        handleHue({breezeway: 180, garage: 180, driveway: 180}, true);
 
         console.log('Tessel reports opened ' + t + ' state at ' + new Date());
         reply(response, "opened alert received");
@@ -183,17 +258,29 @@ http.createServer(function(req, response) {
         var sun = getSunTimes();
         var state = {
             is_night: isNight(), 
-            sunrise: sun.sunrise,
-            sunset: sun.sunset,
-            current: new Date()
+            sunrise: format(sun.sunrise, true),
+            sunset: format(sun.sunset, true),
+            lampOn: format(sun.lampOn, true),
+            lampOff: format(sun.lampOff, true),
+            current: format(new Date(), true)
         };
         reply(response, state);
     }
     else if (uri == '/state'){ // call from user
         callTessel('state', function(tesselState){
-            var state = JSON.parse(tesselState);
+            var state;
+            try {
+                state = JSON.parse(tesselState);
+            }
+            catch (e) {
+                console.log('Error parsing Tessel state JSON: ' + tesselState);
+                reply(response, 500);
+                return;
+            }
+
             state.is_night = isNight();
             withHueState(function(err, hueState){
+                console.log('Got hue state:'); console.dir(hueState);
                 state.bulbs = err ? {hueError: err} : hueState;
                 withWemoClient('Lamp', function(lampClient){
                     withWemoClient('Aquarium', function(aquaClient){
@@ -215,9 +302,14 @@ http.createServer(function(req, response) {
         reply(response, 'Toggling aquarium.');
     }
     else if (uri == '/lamp'){
+        console.log('Call: /lamp');
         lampForced = true;
         handleWemo('Lamp', toggleWemoDevice);
         reply(response, 'Toggling lamp.');
+    }
+    else if (uri == '/driveway'){
+        handleHue({'driveway': true});
+        reply(response, "Toggled driveway.");
     }
     else if (uri == '/breezeway'){
         handleHue({'breezeway': true});
@@ -243,6 +335,9 @@ http.createServer(function(req, response) {
                 reply(response, 200);
             }
             else if (light == 'aquarium' || light == 'lamp'){
+                if (light == 'lamp')
+                    lampForced = true;
+
                 handleWemo(light.substring(0, 1).toUpperCase() + light.substring(1), toggleWemoDevice);
                 reply(response, 200);
             }
@@ -263,6 +358,10 @@ http.createServer(function(req, response) {
 dash.on("detected", function (dashId) {
     console.log("Detected connection by " + dashId);
     callTessel('state', function(state){
+        if (state && typeof state == 'string'){
+            state = JSON.parse(state);
+        }
+
         if (!state) {
             console.log("No state retrieved.");
         }
@@ -294,7 +393,7 @@ function doOpen(uri, response){
         });
     }
 
-    handleHue({breezeway: 180, garage: 180}, true);
+    handleHue({breezeway: 180, garage: 180, driveway: 180}, true);
 }
 
 function callTessel(uri, callback){
@@ -319,26 +418,64 @@ function handleHue(ops, ifNight){
         for (var kind in ops){
             if (ops.hasOwnProperty(kind)){
                 var state = ops[kind];
-                var bulb; 
+                var bulbs; 
                 if (kind == 'garage')
-                    bulb = 1;
+                    bulbs = [1];
                 else if (kind == 'breezeway')
-                    bulb = 2;
+                    bulbs = [2];
+                else if (kind == 'driveway')
+                    bulbs = [3, 4];
                 else
                     throw 'Unknown light ' + kind;
 
                 if (typeof state == 'number'){
-                    hueRequest(bulb, true, state * 1000);
+                    for (var i = 0; i < bulbs.length; i++){
+                        var bulb = bulbs[i];
+                        hueRequest(bulb, true, state * 1000);
+                    }
                 }
                 else {
-                    hueRequest(bulb, state);
+                    for (var i = 0; i < bulbs.length; i++){
+                        var bulb = bulbs[i];
+                        hueRequest(bulb, true, state);
+                    }
                 }
             }
         }
     }
 }
 
+function bulbName(num){
+    return ['', 'garage', 'breezeway', 'driveway', 'driveway'][+num];
+}
+
+function queryHueBulbs(bulbs, state, cb){
+    if (bulbs.length == 0){
+        cb(null, state);
+        return;
+    }
+
+    var bulb = bulbs[0];
+    request.get({
+        headers: {'content-type': 'application/json'},
+        url: hueAddress + '/' + bulb
+    }, function(err, res, body){
+        if (err){
+            console.log("Error getting bulb " + bulbName(bulb) + " state: " + err);
+            cb(err);
+        }
+        else {
+            state[bulbName(bulb)] = body && /"on": ?true/.test(body);
+            queryHueBulbs(bulbs.slice(1), state, cb);
+        }            
+    });
+}
+
 function withHueState(cb){
+    queryHueBulbs([1,2,3,4], {}, cb);
+}
+
+function withHueStateOld(cb){
     request.get({
       headers: {'content-type' : 'application/json'},
       url: hueAddress + '/1'
@@ -354,7 +491,7 @@ function withHueState(cb){
                 url: hueAddress + '/2'
             }, function(err2, res2, body2){
                 if (err2){
-                    console.log("Error getting garage bulb state: " + err2);
+                    console.log("Error getting breezeway bulb state: " + err2);
                     cb(err2);
                 }
 
@@ -417,8 +554,8 @@ function withWemoClient(device, action, attempt){
     attempt = attempt || 0;
     wemo.discover(function(deviceInfo){
         try {
-            if (deviceInfo) 
-                console.log("Attempt " + attempt + ": discovered device " + deviceInfo.friendlyName);
+            //if (deviceInfo) 
+                //console.log("Attempt " + attempt + ": discovered device " + deviceInfo.friendlyName);
 
             if (deviceInfo && deviceInfo.friendlyName == device){
                 wemoClient[device] = wemo.client(deviceInfo);
@@ -457,22 +594,18 @@ function setWemoState(client, newState){
     }
 }
 
-function isNight(){
+function isNight(log){
     var date = new Date();
-    var times = getSunTimes();
+    var times = getSunTimes(log);
     var sunrise = times.sunrise;
     var sunset = times.sunset;
 
-    //console.log('sunrise: ' + sunrise);
-    //console.log('sunset: ' + sunset);
-    //console.log('now: ' + date);
-
-    if (date < sunrise || date > sunset){
-        //console.log('I conclude that it is night.');
+    if (date.getTime() < sunrise || date.getTime() > sunset){
+        //if (log) console.log('I conclude that it is night.');
         return true;
     }
     else {
-        //console.log('I conclude that it is day.');
+        //if (log) console.log('I conclude that it is day.');
         return false;
     }
 }
