@@ -29,7 +29,8 @@ var lampForced = false, outerLightsForced = false;
 var wemoClient = {};
 var hueBulbs = {
     garage: 1,
-    breezeway: 2
+    breezeway: 2,
+    driveway: [3,4]
 };
 
 checkLamp();
@@ -330,8 +331,14 @@ http.createServer(function(req, response) {
     else if (uri.match(/^\/light/)){ // call from user
         if (/light_[a-z0-9]+/.test(uri)){
             var light = uri.match(/light_([a-z0-9]+)/)[1]; 
-            if (light == 'breezeway' || light == 'garage'){
-                toggleHueBulb(hueBulbs[light]);
+            if (light == 'breezeway' || light == 'garage' || light == 'driveway'){
+                var bulbs = hueBulbs[light];
+                if (typeof bulbs == 'number')
+                    bulbs = [bulbs];
+                    
+                for (var i = 0; i < bulbs.length; i++)
+                    toggleHueBulb(bulbs[i]);
+
                 reply(response, 200);
             }
             else if (light == 'aquarium' || light == 'lamp'){
