@@ -4,7 +4,7 @@ var http = require("http"),
     request = require('request'),
     Wemo = require('wemo-client'),
     wemo = new Wemo(),
-    //dash_button = require("node-dash-button"),
+    dash_button = require("node-dash-button"),
     suncalc = require("suncalc"),
     moment = require("moment-timezone"),
     exec = require('child_process').exec;
@@ -16,7 +16,7 @@ if (!process.argv[4]){
 
 let func = (i) => console.log(`${i}`);
 let garageButtonMac = "50:f5:da:90:d1:fa";
-//var dash = dash_button([garageButtonMac]);
+var dash = dash_button([garageButtonMac]);
 var port = process.argv[2]; 
 var emailAddress = process.argv[3];
 var tesselAddress = process.argv[4];
@@ -335,7 +335,7 @@ http.createServer(function(req, response) {
     }
 }).listen(8888);
 
-/*dash.on("detected", function (dashId) {
+dash.on("detected", function (dashId) {
     console.log("Detected connection by " + dashId);
     callTessel('state', function(state){
         if (state && typeof state == 'string'){
@@ -354,7 +354,7 @@ http.createServer(function(req, response) {
             doOpen('/open10');
         }
     });
-});*/
+});
 
 function doOpen(uri, response){
     if (/open[0-9]+/.test(uri)){
