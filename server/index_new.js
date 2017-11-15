@@ -93,21 +93,19 @@ function reply(res, msg){
     res.end();
 }
 
-function doOpen(uri, response){
+async function doOpen(uri, response){
     if (/open[0-9]+/.test(uri)){
         let time = uri.match(/open([0-9]+)/)[1];
         console.log((!response ? 'Button' : 'App') + ' open ' + time + ' command received at ' + new Date());
-        tessel.call('open' + time, function(msg){
-            console.log('Tessel replies: ' + msg);
-            if (response) reply(response, msg);
-        });
+        let msg = await tessel.call('open' + time);
+        console.log('Tessel replies: ' + msg);
+        if (response) reply(response, msg);        
     }
     else {
         console.log('Open indefinitely command received at ' + new Date());
-        tessel.call('open0', function(msg){
-            console.log('Tessel replies: ' + msg);
-            if (response) reply(response, msg);
-        });
+        let msg = tessel.call('open0');
+        console.log('Tessel replies: ' + msg);
+        if (response) reply(response, msg);
     }
 
     if (isNight()){
@@ -198,7 +196,7 @@ async function handleRequest(req){
             console.log('Close command received at ' + new Date());
             let msg = await tessel.call('close');
             console.log('Tessel replies: ' + msg);
-            return "Closed.";
+            return msg;
         }
         else {
             console.log('401 on close command at ' + new Date());
@@ -243,41 +241,25 @@ async function handleRequest(req){
         return state;
     }
     else if (uri == '/outside'){
-        let bulbState = await bulbs.getState();
-        let totalState = bulbState['garage'] || bulbState['breezeway'] || bulbState['driveway'];
-        let newState;
-        if (totalState){
-            bulbs.off('driveway');
-            bulbs.off('breezeway');
-            bulbs.off('garage');
-            newState = 'off';
-        }
-        else {
-            bulbs.on('driveway');
-            bulbs.on('breezeway');
-            bulbs.on('garage');
-            newState = 'on';
-        }
-
-        
-        return 'Toggling outside devices ' + newState + '.';
+        let newState = await bulbs.toggle('outside');        
+        return 'Toggling outside devices to ' + newState + '.';
     }
     else if (uri == '/aquarium'){
-        await bulbs.toggle('Aquarium');
-        return 'Toggled aquarium.';
+        let newState = await bulbs.toggle('Aquarium');
+        return `Toggled aquarium to ${newState}.`;
     }
     else if (uri == '/lamp'){
         lampForced = true;
-        await bulbs.toggle('Lamp');
-        return 'Toggled lamp.';
+        let newState = await bulbs.toggle('Lamp');
+        return `Toggled lamp to ${newState}.`;
     }
     else if (uri == '/driveway'){
-        await bulbs.toggle('driveway');
-        return "Toggled driveway.";
+        let newState = await bulbs.toggle('driveway');
+        return `Toggled driveway to ${newState}.`;
     }
     else if (uri == '/breezeway'){
-        await bulbs.toggle('breezeway');
-        return "Toggled breezeway.";
+        let newState = await bulbs.toggle('breezeway');
+        return `Toggled breezeway to ${newState}`;
     }
     else if (uri == '/garage'){
         await bulbs.toggle('garage');
@@ -293,7 +275,7 @@ async function handleRequest(req){
     }*/
     else if (uri.match(/^\/light/)){ // call from user
         if (/light_[a-z0-9]+/.test(uri)){
-            let light = uri.match(/light_([a-z0-9]+)/)[1]; 
+            let light = uri.match(/light_([a-z0-9]+)/)[1];
             if (light.toLowerCase() == 'lamp')
                 lampForced = true;
 

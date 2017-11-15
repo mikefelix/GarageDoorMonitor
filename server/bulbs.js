@@ -15,14 +15,14 @@ let doAfterSeconds = (doThis, after) => {
     setTimeout(doThis, after * 1000);
 }
 
-class Bulbs {
+export default class Bulbs {
     constructor(hueAddress){
         this.hue = new Hue(hueAddress);
         this.wemo = new Wemo();
         this.wemoBulbs = ['Lamp', 'Aquarium'];
         this.hueBulbs = {
-            garage: 1,
-            breezeway: 2,
+            garage: [1],
+            breezeway: [2],
             driveway: [3,4],
             outside: [1,2,3,4]
         };
@@ -38,9 +38,6 @@ class Bulbs {
     async on(bulbName, time){
         if (isHue(bulbName)){
             let bulbs = this.hueBulbs[bulbName];
-            if (typeof bulbs == 'number')
-                bulbs = [bulbs];
-
             for (let i = 0; i < bulbs.length; i++)
                 this.hue.on(bulbs[i]);
 
@@ -71,9 +68,6 @@ class Bulbs {
     async off(bulbName){
         if (isHue(bulbName)){
             let bulbs = this.hueBulbs[bulbName];
-            if (typeof bulbs == 'number')
-                bulbs = [bulbs];
-
             for (let i = 0; i < bulbs.length; i++)
                 this.hue.off(bulbs[i]);
 
@@ -91,9 +85,6 @@ class Bulbs {
     async toggle(bulbName, time){
         if (isHue(bulbName)){
             let bulbs = this.hueBulbs[bulbName];
-            if (typeof bulbs == 'number')
-                bulbs = [bulbs];
-
             let state = false;
             for (let i = 0; i < bulbs.length; i++)
                 state |= this.hue.toggle(bulbs[i]);
@@ -124,5 +115,3 @@ class Bulbs {
         }
     }
 }
-
-module.exports = Bulbs;
