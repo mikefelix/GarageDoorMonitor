@@ -1,129 +1,79 @@
-var http = require("http"),
+let http = require("http"),
     url = require("url"),
+    format = require("./format.js"),
     path = require("path"),
     request = require('request'),
-    Wemo = require('wemo-client'),
-    wemo = new Wemo(),
-    //dash_button = require("node-dash-button"),
-    suncalc = require("suncalc"),
+//    dash_button = require("node-dash-button"),
     moment = require("moment-timezone"),
-    exec = require('child_process').exec;
+    exec = require('child_process').exec,
+    mail = require('./mail.js').send,
+    Bulbs = require('./bulbs.js'),
+    Tessel = require('./tessel.js'),
+    SunTimes = require('./sun_times.js');
 
-if (!process.argv[4]){
-    console.log("Usage:\nnode garage.js PORT EMAIL TESSEL_URL");
+if (!process.argv[6]){
+    console.log("Usage:\nnode garage.js PORT EMAIL TESSEL_URL AUTH_KEY HUE_KEY ");
     throw "Invalid usage";
 }
 
-let func = (i) => console.log(`${i}`);
-let garageButtonMac = "50:f5:da:90:d1:fa";
-//var dash = dash_button([garageButtonMac]);
-var port = process.argv[2]; 
-var emailAddress = process.argv[3];
-var tesselAddress = process.argv[4];
-var authKey = process.argv[5];
-var hueKey = process.argv[6];
-var pushoverKey = process.argv[7];
-var hueAddress = 'http://192.168.0.115/api/' + hueKey + '/lights';
-var currentWeatherUri = 'http://mozzarelly.com/weather/current';
-var lampForced = false, outerLightsForced = false;
+const garageButtonMac = "50:f5:da:90:d1:fa";
+//const dash = dash_button([garageButtonMac]);
+const port = process.argv[2]; 
+const emailAddress = process.argv[3];
+const tessel = new Tessel(process.argv[4]);
+const authKey = process.argv[5];
+const hueKey = process.argv[6];
+const hueAddress = `http://192.168.0.115/api/${hueKey}/lights`;
+const bulbs = new Bulbs(hueAddress);
+const currentWeatherUri = 'http://mozzarelly.com/weather/current';
 
-var wemoClient = {};
-var hueBulbs = {
-    garage: 1,
-    breezeway: 2,
-    driveway: [3,4]
-};
+let lampForced = false, outerLightsForced = false;
 
-checkLamp();
-
-console.log("Process started. Times for today:");
-getSunTimes(true);
-
-function checkLamp(){
-    var date = new Date();
-    var time = date.getTime();
-    var sunTimes = getSunTimes();
-    var sunrise = sunTimes.sunrise.getTime();
-    var lampOn = sunTimes.lampOn.getTime();
-    var lampOff = sunTimes.lampOff.getTime();
+async function checkLamp(){
+    let date = new Date();
+    let time = date.getTime();
+    let sunTimes = SunTimes.get();
+    let sunrise = sunTimes.sunrise.getTime();
+    let lampOn = sunTimes.lampOn.getTime();
+    let lampOff = sunTimes.lampOff.getTime();
 
     if (time > sunrise && time < sunrise + 60000){
         console.log("Turning off all outer lights. The dawn has come!");
-        allHueBulbsOff();
+        bulbs.toggle('outside');
     }
 
     if (lampForced && date.getHours() == 4){
         lampForced = false;
     }
 
-    withWemoClient('Lamp', function(lampClient){
-        lampClient.getBinaryState(function(lampErr, lampState){
-            var afterLampOn = time > lampOn;
-            var afterLampOff = time > lampOff;
-            lampState = lampState == 1 ? true : false;
+    let lampState = (await bulbs.getBulbState('lamp')) === 1;
+    let afterLampOn = time > lampOn;
+    let afterLampOff = time > lampOff;
 
-            if (lampErr) {
-                console.log(lampErr);
-            }
-            else if (!lampForced){
-                if (!lampState && afterLampOn && !afterLampOff){
-                    console.log('Turn on lamp because current time', 
-                        format(date), 
-                        'is after lampOn time',
-                        format(sunTimes.lampOn),
-                        'and not after lampOff time',
-                        format(sunTimes.lampOff));
+    if (!lampForced){
+        if (!lampState && afterLampOn && !afterLampOff){
+            console.log('Turn on lamp because current time', 
+                format(date), 
+                'is after lampOn time',
+                format(sunTimes.lampOn),
+                'and not after lampOff time',
+                format(sunTimes.lampOff));
 
-                    lampForced = false;
-                    handleWemo('Lamp', turnOnWemoDevice);
-                }
-                else if (lampState && afterLampOff){
-                    console.log('Turn off lamp at ' + format(date));
-                    lampForced = false;
-                    handleWemo('Lamp', turnOffWemoDevice);
-                }
-            }
-        });
-    });
+            lampForced = false;
+            bulbs.on('Lamp');
+        }
+        else if (lampState && afterLampOff){
+            console.log('Turn off lamp at ' + format(date));
+            lampForced = false;
+            bulbs.off('Lamp');
+        }
+    }
 
     setTimeout(checkLamp, 60000);
 }
 
-function getSunTimes(log){
-    var tz = 'America/Denver';
-    var date = moment();
-    var times = suncalc.getTimes(date, 40.7608, -111.891);
-    var sr = moment(Date.parse(times.sunrise));
-    sr.date(date.date());
-    var sunrise = new Date(sr); 
-    var ss = moment(Date.parse(times.sunsetStart));
-    ss.date(date.date());
-    var sunset = new Date(ss);
-    var lampOn = new Date(sunset.getTime() - (1000 * 60 * 30));
-    var elevenThirtyPm = date.startOf('day').add(23, 'hours').add(30, 'minutes').toDate();
-    //var sevenThirtyPm = date.startOf('day').add(20, 'hours').add(30, 'minutes').toDate();
-
-    var ret = {
-        retrieved: new Date(),
-        sunrise: sunrise,
-        sunset: sunset,
-        lampOn: lampOn,//sevenThirtyPm,
-        lampOff: elevenThirtyPm
-    };
-
-    if (log) {
-        console.log('Current time is: ' + format(ret.retrieved));
-        console.log('Sunrise time is: ' + format(ret.sunrise));
-        console.log('Lamp on time is: ' + format(ret.lampOn));
-        console.log('Sunset time is: ' + format(ret.sunset));
-        console.log('Lamp off time is: ' + format(ret.lampOff));
-    }
-
-    return ret;
-}
-
 function reply(res, msg){
-    var headers = {
+    let headers = {
         'Content-type': 'application/json',
         'Access-Control-Allow-Origin': '*'
     };
@@ -143,155 +93,166 @@ function reply(res, msg){
     res.end();
 }
 
-function format(date, noQuotes){
-    var q = noQuotes ? '' : '"'
-    return q + moment(date).format("dddd, MMMM Do YYYY, h:mm:ss a") + q;
+async function doOpen(uri, response){
+    if (/open[0-9]+/.test(uri)){
+        let time = uri.match(/open([0-9]+)/)[1];
+        console.log((!response ? 'Button' : 'App') + ' open ' + time + ' command received at ' + new Date());
+        let msg = await tessel.call('open' + time);
+        console.log('Tessel replies: ' + msg);
+        if (response) reply(response, msg);        
+    }
+    else {
+        console.log('Open indefinitely command received at ' + new Date());
+        let msg = tessel.call('open0');
+        console.log('Tessel replies: ' + msg);
+        if (response) reply(response, msg);
+    }
+
+    if (SunTimes.isNight()){
+        bulbs.on('garage', 180);
+        bulbs.on('driveway', 180);
+        bulbs.on('breezeway', 180);
+    }
 }
 
-function mail(subj, body){
-    var cmd = 'echo "' + body + '" | /usr/bin/mail -s "' + subj + '" ' + emailAddress;
+/*
+dash.on("detected", function (dashId) {
+    console.log("Detected connection by " + dashId);
+    tessel.call('state', function(state){
+        if (state && typeof state == 'string'){
+            state = JSON.parse(state);
+        }
 
-    exec(cmd, function callback(error, stdout, stderr){
-        if (error) console.log("Failed to mail. " + error);
+        if (!state) {
+            console.log("No state retrieved.");
+        }
+        else if (state.is_open){
+            console.log("Closing for dash");
+            tessel.call('close', function(){});
+        }
+        else {
+            console.log("Opening for dash");
+            doOpen('/open10');
+        }
     });
-}
-
+});
+*/
 process.on('uncaughtException', function (err) {
-    console.error((new Date).toUTCString() + ' uncaughtException:', err.message);
+    console.error(new Date().toUTCString() + ' uncaughtException:', err.message);
     console.error(err.stack);
 });
 
-http.createServer(function(req, response) {
-    var uri = req.url;
+process.on('unhandledRejection', (reason, promise) => {
+    console.log('Unhandled promise rejection. Reason: ' + reason);
+});
+
+async function handleRequest(req){
+    let uri = req.url;
     console.log('Received call at ' + format(new Date()) + ': ' + uri);
 
     if (uri == '/warn1'){
-        console.log("Send warning 1 at " + new Date());
-        //mail("Garage left open", "The garage has been open for too long. Shutting it.");
-        reply(response, "OK");
+        return "OK";
     }
     else if (uri == '/warn2'){
-        console.log("Send warning 2 at " + new Date());
         mail("Garage failed to close", "Garage didn't shut when I tried. Trying again.");
-        reply(response, "OK");
+        return "OK";
     }
     else if (uri == '/warn3'){
-        console.log("Send warning 3 at " + new Date());
         mail("Garage is stuck open!", "Garage is open and I cannot shut it! I tried twice.");
-        reply(response, "OK");
+        return "OK";
     }
     else if (uri == '/alive'){ // ping from tessel
         console.log("Tessel reports that it is alive at " + new Date());
-        reply(response, "Yay!");
+        return "Yay!";
     }
     else if (uri.match(/^\/opened/)){ // call from tessel
-        var t = 'indefinitely';
+        let t = 'indefinitely';
         if (uri.match(/[0-9]+/))
             t = uri.match(/[0-9]+/)[0];
 
-        handleHue({breezeway: 180, garage: 180, driveway: 180}, true);
+        if (SunTimes.isNight())
+            bulbs.on('outside', 180);
 
-        console.log('Tessel reports opened ' + t + ' state at ' + new Date());
-        reply(response, "opened alert received");
+        console.log(`Tessel reports opened ${t} state at ${new Date()}`);
+        return "opened alert received";
     }
     else if (uri == '/closed'){ // call from tessel
         console.log('Tessel reports closed state at ' + new Date());
-        reply(response, "closed alert received");
+        return "closed alert received";
     }
     else if (uri.match(/^\/close/)){ // call from user
         if (new RegExp('auth=' + authKey).test(req.url)){
             console.log('Close command received at ' + new Date());
-            callTessel('close', function(msg){
-                console.log('Tessel replies: ' + msg);
-                reply(response, msg);
-            });
+            let msg = await tessel.call('close');
+            console.log('Tessel replies: ' + msg);
+            return msg;
         }
         else {
             console.log('401 on close command at ' + new Date());
-            reply(response, 401);
+            return 401;
         }
     }
     else if (uri.match(/^\/open/)){ // call from user
         if (new RegExp('auth=' + authKey).test(uri)){
             doOpen(req.url, response);
-            reply(response, 200);
+            return 200;
         }
         else {
             console.log('401 on open at ' + new Date());
-            reply(response, 401);
+            return 401;
         }
     }
     else if (uri == '/time'){ // call from user
-        var sun = getSunTimes();
-        var state = {
-            is_night: isNight(), 
+        let sun = SunTimes.get();
+        let state = {
+            is_night: SunTimes.isNight(), 
             sunrise: format(sun.sunrise, true),
             sunset: format(sun.sunset, true),
             lampOn: format(sun.lampOn, true),
             lampOff: format(sun.lampOff, true),
             current: format(new Date(), true)
         };
-        reply(response, state);
+
+        return state;
     }
     else if (uri == '/state'){ // call from user
-        callTessel('state', function(tesselState){
-            var state;
-            try {
-                state = JSON.parse(tesselState);
-            }
-            catch (e) {
-                console.log('Error parsing Tessel state JSON: ' + tesselState);
-                reply(response, 500);
-                return;
-            }
+        let tesselState = await tessel.call('state');
+        let state;
+        try {
+            state = JSON.parse(tesselState);
+        }
+        catch (e) {
+            throw 'Error parsing Tessel state JSON: ' + tesselState;
+        }
 
-            state.is_night = isNight();
-            withHueState(function(err, hueState){
-                console.log('Got hue state:'); console.dir(hueState);
-                state.bulbs = err ? {hueError: err} : hueState;
-                withWemoClient('Lamp', function(lampClient){
-                    withWemoClient('Aquarium', function(aquaClient){
-                        lampClient.getBinaryState(function(lampErr, lampState){
-                            aquaClient.getBinaryState(function(aquaErr, aquaState){
-                                state.bulbs.lamp = lampErr ? lampErr : (lampState == 1);
-                                state.bulbs.aquarium = aquaErr ? aquaErr : (aquaState == 1);
-
-                                reply(response, state);
-                            });
-                        });
-                    });
-                });
-            });
-        });
-    }
-    else if (uri == '/aquarium'){
-        handleWemo('Aquarium', toggleWemoDevice);
-        reply(response, 'Toggling aquarium.');
-    }
-    else if (uri == '/lamp'){
-        console.log('Call: /lamp');
-        lampForced = true;
-        handleWemo('Lamp', toggleWemoDevice);
-        reply(response, 'Toggling lamp.');
-    }
-    else if (uri == '/driveway'){
-        handleHue({'driveway': true});
-        reply(response, "Toggled driveway.");
+        state.is_night = SunTimes.isNight();
+        state.bulbs = await bulbs.getState();
+        return state;
     }
     else if (uri == '/outside'){
-        toggleHueBulb(1);
-        toggleHueBulb(2);
-        toggleHueBulb(3);
-        toggleHueBulb(4);
-        reply(response, "Toggled outside lights.");
+        let newState = await bulbs.toggle('outside');        
+        return 'Toggling outside devices to ' + newState + '.';
+    }
+    else if (uri == '/aquarium'){
+        let newState = await bulbs.toggle('aquarium');
+        return `Toggled aquarium to ${newState}.`;
+    }
+    else if (uri == '/lamp'){
+        lampForced = true;
+        let newState = await bulbs.toggle('lamp');
+        return `Toggled lamp to ${newState}.`;
+    }
+    else if (uri == '/driveway'){
+        let newState = await bulbs.toggle('driveway');
+        return `Toggled driveway to ${newState}.`;
     }
     else if (uri == '/breezeway'){
-        handleHue({'breezeway': true});
-        reply(response, "Toggled breezeway.");
+        let newState = await bulbs.toggle('breezeway');
+        return `Toggled breezeway to ${newState}`;
     }
     else if (uri == '/garage'){
-        handleHue({'garage': true});
-        reply(response, "Toggled garage.");
+        await bulbs.toggle('garage');
+        return "Toggled garage.";
     }
     /*else if (uri == '/home'){ 
         console.log("Nest home at " + new Date());
@@ -303,299 +264,38 @@ http.createServer(function(req, response) {
     }*/
     else if (uri.match(/^\/light/)){ // call from user
         if (/light_[a-z0-9]+/.test(uri)){
-            var light = uri.match(/light_([a-z0-9]+)/)[1]; 
-            if (light == 'breezeway' || light == 'garage' || light == 'driveway'){
-                var bulbs = hueBulbs[light];
-                if (typeof bulbs == 'number')
-                    bulbs = [bulbs];
-                    
-                for (var i = 0; i < bulbs.length; i++)
-                    toggleHueBulb(bulbs[i]);
+            let light = uri.match(/light_([a-z0-9]+)/)[1];
+            if (light.toLowerCase() == 'lamp')
+                lampForced = true;
 
-                reply(response, 200);
-            }
-            else if (light == 'aquarium' || light == 'lamp'){
-                if (light == 'lamp')
-                    lampForced = true;
-
-                handleWemo(light.substring(0, 1).toUpperCase() + light.substring(1), toggleWemoDevice);
-                reply(response, 200);
-            }
-            else {
-                reply(response, 404);
-            }
+            if (await bulbs.toggle(light))
+                return 200;
+            else
+                return 404;
         }
         else {
-            reply(response, 404);
+            return 404;
         }
     }
     else {
         console.log('Unknown URI: ' + uri);
-        reply(response, 404);
+        return 404;
     }
+}
+
+http.createServer((request, response) => {
+    handleRequest(request)
+      .then(result => {
+          reply(response, result);
+      })
+      .catch(err => {
+          console.log('Error: ' + err);
+          reply(response, 500);
+      });
 }).listen(8888);
 
-/*dash.on("detected", function (dashId) {
-    console.log("Detected connection by " + dashId);
-    callTessel('state', function(state){
-        if (state && typeof state == 'string'){
-            state = JSON.parse(state);
-        }
+checkLamp();
 
-        if (!state) {
-            console.log("No state retrieved.");
-        }
-        else if (state.is_open){
-            console.log("Closing for dash");
-            callTessel('close', function(){});
-        }
-        else {
-            console.log("Opening for dash");
-            doOpen('/open10');
-        }
-    });
-});*/
+console.log("Process started. Times for today:");
+SunTimes.get(true);
 
-function doOpen(uri, response){
-    if (/open[0-9]+/.test(uri)){
-        var time = uri.match(/open([0-9]+)/)[1];
-        console.log((!response ? 'Button' : 'App') + ' open ' + time + ' command received at ' + new Date());
-        callTessel('open' + time, function(msg){
-            console.log('Tessel replies: ' + msg);
-            if (response) reply(response, msg);
-        });
-    }
-    else {
-        console.log('Open indefinitely command received at ' + new Date());
-        callTessel('open0', function(msg){
-            console.log('Tessel replies: ' + msg);
-            if (response) reply(response, msg);
-        });
-    }
-
-    handleHue({breezeway: 180, garage: 180, driveway: 180}, true);
-}
-
-function callTessel(uri, callback){
-    try {
-        request(tesselAddress + '/' + uri, function(err, res, body){
-            if (err){
-                callback("Error: " + err);
-            }
-            else {
-                callback(body);
-            }
-        });
-    }
-    catch (e) {
-        console.log("Could not communicate with Tessel: " + e);
-    }
-}
-
-function handleHue(ops, ifNight){
-    console.log('Handle hue lights' + (ifNight ? ' if it is night' : '') + '.');
-    if (!ifNight || isNight()){
-        for (var kind in ops){
-            if (ops.hasOwnProperty(kind)){
-                var state = ops[kind];
-                console.log('do state ' + state);
-                var bulbs; 
-                if (kind == 'garage')
-                    bulbs = [1];
-                else if (kind == 'breezeway')
-                    bulbs = [2];
-                else if (kind == 'driveway')
-                    bulbs = [3, 4];
-                else
-                    throw 'Unknown light ' + kind;
-
-                if (typeof state == 'number'){
-                    for (var i = 0; i < bulbs.length; i++){
-                        var bulb = bulbs[i];
-                        hueRequest(bulb, true, state * 1000);
-                    }
-                }
-                else {
-                    for (var i = 0; i < bulbs.length; i++){
-                        var bulb = bulbs[i];
-                        hueRequest(bulb, true, state);
-                    }
-                }
-            }
-        }
-    }
-}
-
-function bulbName(num){
-    return ['', 'garage', 'breezeway', 'driveway', 'driveway'][+num];
-}
-
-function queryHueBulbs(bulbs, state, cb){
-    if (bulbs.length == 0){
-        cb(null, state);
-        return;
-    }
-
-    var bulb = bulbs[0];
-    request.get({
-        headers: {'content-type': 'application/json'},
-        url: hueAddress + '/' + bulb
-    }, function(err, res, body){
-        if (err){
-            console.log("Error getting bulb " + bulbName(bulb) + " state: " + err);
-            cb(err);
-        }
-        else {
-            state[bulbName(bulb)] = body && /"on": ?true/.test(body);
-            queryHueBulbs(bulbs.slice(1), state, cb);
-        }            
-    });
-}
-
-function withHueState(cb){
-    queryHueBulbs([1,2,3,4], {}, cb);
-}
-
-function withHueStateOld(cb){
-    request.get({
-      headers: {'content-type' : 'application/json'},
-      url: hueAddress + '/1'
-    }, function(err1, res1, body1){
-        if (err1){
-            console.log("Error getting garage bulb state: " + err1);
-            cb(err1);
-        } 
-        else {
-            var on1 = body1 && /"on": ?true/.test(body1);
-            request.get({
-                headers: {'content-type' : 'application/json'},
-                url: hueAddress + '/2'
-            }, function(err2, res2, body2){
-                if (err2){
-                    console.log("Error getting breezeway bulb state: " + err2);
-                    cb(err2);
-                }
-
-                var on2 = body2 && /"on": ?true/.test(body2);
-                cb(null, {garage: on1, breezeway: on2});
-            });
-        }
-    });
-}
-
-function toggleHueBulb(bulb) {
-    console.log("Toggle bulb " + bulb);
-    request.get({
-      headers: {'content-type' : 'application/json'},
-      url: hueAddress + '/' + bulb
-    }, function(err, res, body){
-        if (err){
-            console.log("Error getting bulb state: " + err);
-        } 
-        else {
-            var on = body && /"on": ?true/.test(body);
-            hueRequest(bulb, !on);
-        }
-    });
-}
-
-function hueRequest(bulb, on, timeout){
-    console.log('Setting bulb ' + bulb + ' to ' + (on ? 'on' : 'off') + ' at ' + new Date());
-    request.put({
-          headers: {'content-type' : 'application/json'},
-          url:     hueAddress + '/' + bulb + '/state',
-          body:    JSON.stringify({on:on})
-    }, function(err, res, body){
-       if (err){
-           console.log('Hue error: ' + err);
-       }
-       else if (timeout){
-           console.log('Timeout for bulb ' + timeout);
-           setTimeout(function(){hueRequest(bulb, false)}, timeout);
-       }
-    });
-}
-
-function allHueBulbsOff(){
-    hueRequest(1, false);
-    hueRequest(2, false);
-    hueRequest(3, false);
-    hueRequest(4, false);
-}
-
-function handleWemo(device, action){
-    withWemoClient(device, function(client){
-        action(client);
-    });
-}
-
-function withWemoClient(device, action, attempt){
-    if (wemoClient[device]){
-        try {
-            action(wemoClient[device]);
-        } catch (e){
-            delete wemoClient[device];
-            withWemoClient(device, action, attempt);
-        }
-
-        return;
-    }
-
-    attempt = attempt || 0;
-    wemo.discover(function(deviceInfo){
-        try {
-            //if (deviceInfo) 
-                //console.log("Attempt " + attempt + ": discovered device " + deviceInfo.friendlyName);
-
-            if (deviceInfo && deviceInfo.friendlyName == device){
-                wemoClient[device] = wemo.client(deviceInfo);
-                action(wemoClient[device]);
-            }
-        } 
-        catch (e){
-            console.log("Can't discover devices: " + e);
-        }
-    });
-}
-
-function turnOnWemoDevice(client){ setWemoState(client, 1); }
-function turnOffWemoDevice(client){ setWemoState(client, 0); }
-function toggleWemoDevice(client){ setWemoState(client); }
-function setWemoState(client, newState){
-    try {
-        client.getBinaryState(function(err, state){
-            if (err) {
-                console.log("Error getting wemo state: " + err);
-                delete wemoClient[device];
-            }
-            else if (newState === undefined){
-                console.log("Toggling wemo state from " + state + ".");
-                client.setBinaryState(state == 0 ? 1 : 0);
-            }
-            else if (state != newState){
-                console.log("Setting wemo to state " + newState + ".");
-                client.setBinaryState(newState);
-            }
-            else console.log("Lamp was already in state " + newState + ".");
-        });
-    }
-    catch (e) {
-        console.log("Can't communicate with Wemo: " + e);
-    }
-}
-
-function isNight(log){
-    var date = new Date();
-    var times = getSunTimes(log);
-    var sunrise = times.sunrise;
-    var sunset = times.sunset;
-
-    if (date.getTime() < sunrise || date.getTime() > sunset){
-        //if (log) console.log('I conclude that it is night.');
-        return true;
-    }
-    else {
-        //if (log) console.log('I conclude that it is day.');
-        return false;
-    }
-}

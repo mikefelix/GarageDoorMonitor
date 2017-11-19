@@ -15,17 +15,26 @@ let doAfterSeconds = (doThis, after) => {
     setTimeout(doThis, after * 1000);
 }
 
-export default class Bulbs {
+module.exports = class Bulbs {
     constructor(hueAddress){
-        this.hue = new Hue(hueAddress);
-        this.wemo = new Wemo();
-        this.wemoBulbs = ['Lamp', 'Aquarium'];
+        this.wemoBulbs = ['lamp', 'aquarium'];
         this.hueBulbs = {
             garage: [1],
             breezeway: [2],
             driveway: [3,4],
             outside: [1,2,3,4]
         };
+        this.hue = new Hue(hueAddress, this.hueBulbs);
+        this.wemo = new Wemo(this.wemoBulbs);
+    }
+
+    async getBulbState(name){
+        if (isHue(name)){
+            return await this.hue.getBulbState(name);
+        }
+        else if (isWemo(name)){
+            return await this.wemo.getBulbState(name);
+        }
     }
 
     async getState(){

@@ -2,6 +2,22 @@ var suncalc = require("suncalc");
 var moment = require('moment-timezone');
 var format = require('./format.js');
 
+function isNight(log){
+    let date = new Date();
+    let times = getSunTimes(log);
+    let sunrise = times.sunrise;
+    let sunset = times.sunset;
+
+    if (date.getTime() < sunrise || date.getTime() > sunset){
+        if (log) console.log('I conclude that it is night.');
+        return true;
+    }
+    else {
+        if (log) console.log('I conclude that it is day.');
+        return false;
+    }
+}
+
 function getSunTimes(log){
     var tz = 'America/Denver';
     var date = moment();
@@ -36,5 +52,6 @@ function getSunTimes(log){
 }
 
 module.exports = {
-    get: getSunTimes
+    get: getSunTimes,
+    isNight: isNight
 };

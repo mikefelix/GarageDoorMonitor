@@ -1,6 +1,6 @@
 var request = require('request');
 
-export default class Tessel {
+module.exports = class Tessel {
     constructor(address){
         this.tesselAddress = address;
     }

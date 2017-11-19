@@ -1,6 +1,22 @@
 const WemoClient = require('wemo-client'),
       wemo = new WemoClient();
 
+function getState(client){
+    return new Promise((resolve, reject) => {
+        try {
+             client.getBinaryState((err, state) => {
+                 if (err)
+                    reject(err);
+                 else 
+                    resolve(state);
+             });
+        }
+        catch (e){
+            reject(e);
+        }
+    });
+}
+
 function setState(client, newState){
     return new Promise((resolve, reject) => {
         try {
@@ -31,6 +47,7 @@ function setState(client, newState){
 
 function getClient(clients, name, forceDiscover){
     return new Promise((resolve, reject) => {
+        name = name.substring(0, 1).toUpperCase() + name.substring(1);
         if (forceDiscover)
             delete clients[name];
 
@@ -43,7 +60,7 @@ function getClient(clients, name, forceDiscover){
                 try {
                     if (deviceInfo && deviceInfo.friendlyName == name){
                         clients[name] = wemo.client(deviceInfo);
-                        resolve(action(clients[name]));
+                        resolve(clients[name]);
                     }
                 } 
                 catch (e){
@@ -58,7 +75,7 @@ function getClient(clients, name, forceDiscover){
 async function changeState(clients, name, newState, retrying){
     try {
         let client = await getClient(clients, name);
-        setState(client, 1);
+        setState(client, newState);
     }
     catch (err) {
         if (retrying)
@@ -68,22 +85,43 @@ async function changeState(clients, name, newState, retrying){
     }
 }
 
-export default class Wemo {
-    constructor(){
+module.exports = class Wemo {
+    constructor(bulbs){
         this.clients = {};
+        this.bulbs = bulbs;
+    }
+
+    async getState(){
+        let totalState = {};
+        for (let i = 0; i < this.bulbs.length; i++){
+            let bulb = this.bulbs[i];
+            try {
+                totalState[bulb] = await this.getBulbState(bulb);
+            }
+            catch (e){
+                console.log(`Error getting wemo state for bulb ${bulb}`);
+            }
+        }
+
+        return totalState;
+    }
+
+    async getBulbState(bulb){
+        let client = await getClient(this.clients, bulb);
+        return await getState(client);
     }
 
     async on(name, timeout){
-        changeState(clients, name, true);
+        changeState(this.clients, name, true);
         if (timeout) setTimeout(() => this.off(name), timeout);
     }
 
     async off(name){ 
-        changeState(clients, name, false);
+        changeState(this.clients, name, false);
     }
 
     async toggle(name, timeout){ 
-        changeState(clients, name);
+        changeState(this.clients, name);
         if (timeout) setTimeout(() => this.toggle(name), timeout);
     }
 }
