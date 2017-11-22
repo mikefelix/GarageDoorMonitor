@@ -18,7 +18,7 @@ function isNight(log){
     }
 }
 
-function getSunTimes(log){
+function getSunTimes(){
     var tz = 'America/Denver';
     var date = moment();
     var times = suncalc.getTimes(date, 40.7608, -111.891);
@@ -39,14 +39,6 @@ function getSunTimes(log){
         lampOn: lampOn,//sevenThirtyPm,
         lampOff: elevenThirtyPm
     };
-
-    if (log) {
-        console.log('Current time is: ' + format(ret.retrieved));
-        console.log('Sunrise time is: ' + format(ret.sunrise));
-        console.log('Lamp on time is: ' + format(ret.lampOn));
-        console.log('Sunset time is: ' + format(ret.sunset));
-        console.log('Lamp off time is: ' + format(ret.lampOff));
-    }
 
     return ret;
 }

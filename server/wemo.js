@@ -1,94 +1,13 @@
 const WemoClient = require('wemo-client'),
       wemo = new WemoClient();
 
-function getState(client){
-    return new Promise((resolve, reject) => {
-        try {
-             client.getBinaryState((err, state) => {
-                 if (err)
-                    reject(err);
-                 else 
-                    resolve(state);
-             });
-        }
-        catch (e){
-            reject(e);
-        }
-    });
-}
-
-function setState(client, newState){
-    return new Promise((resolve, reject) => {
-        try {
-            client.getBinaryState((err, state) => {
-                if (err) {
-                    console.log("Error getting wemo state: " + err);
-                }
-                else if (newState === undefined){
-                    console.log("Toggling wemo state from " + state + ".");
-                    client.setBinaryState(state == 0 ? 1 : 0);
-                }
-                else if (state != newState){
-                    console.log("Setting wemo to state " + newState + ".");
-                    client.setBinaryState(newState);
-                }
-                else 
-                    console.log("Wemo was already in state " + newState + ".");
-
-                resolve(newState);
-            });
-        }
-        catch (e) {
-            console.log("Can't communicate with Wemo: " + e);
-            reject(e);
-        }
-    });
-}
-
-function getClient(clients, name, forceDiscover){
-    return new Promise((resolve, reject) => {
-        name = name.substring(0, 1).toUpperCase() + name.substring(1);
-        if (forceDiscover)
-            delete clients[name];
-
-        let client = clients[name];
-        if (client) {
-            resolve(client);
-        }
-        else {
-            wemo.discover(deviceInfo => {
-                try {
-                    if (deviceInfo && deviceInfo.friendlyName == name){
-                        clients[name] = wemo.client(deviceInfo);
-                        resolve(clients[name]);
-                    }
-                } 
-                catch (e){
-                    console.log("Can't discover devices: " + e);
-                    reject(e);
-                }
-            });
-        }
-    });
-}
-
-async function changeState(clients, name, newState, retrying){
-    try {
-        let client = await getClient(clients, name);
-        setState(client, newState);
-    }
-    catch (err) {
-        if (retrying)
-            throw err;
-        else
-            changeState(client, newState, true);
-    }
-}
-
 module.exports = class Wemo {
     constructor(bulbs){
         this.clients = {};
         this.bulbs = bulbs;
+        /*wemo.discover(info => {
+            console.log('on startup, discovered', info.friendlyName);
+        });*/
     }
 
     async getState(){
@@ -107,21 +26,114 @@ module.exports = class Wemo {
     }
 
     async getBulbState(bulb){
-        let client = await getClient(this.clients, bulb);
-        return await getState(client);
+        let client = await this._getClient(bulb);
+        let state = await this._getClientState(client);
+        return state === '1' || state === 1 || state === true;
     }
 
     async on(name, timeout){
-        changeState(this.clients, name, true);
+        this._changeState(name, true);
         if (timeout) setTimeout(() => this.off(name), timeout);
     }
 
     async off(name){ 
-        changeState(this.clients, name, false);
+        this._changeState(name, false);
     }
 
     async toggle(name, timeout){ 
-        changeState(this.clients, name);
+        this._changeState(name);
         if (timeout) setTimeout(() => this.toggle(name), timeout);
+    }
+    
+    async _changeState(name, newState, retrying){
+        try {
+            let client = await this._getClient(name);
+            return await this._setClientState(client, newState);
+        }
+        catch (err) {
+            if (retrying){
+                throw err;
+            }
+            else {
+                console.log('Retrying changeState:', name);
+                this._changeState(name, newState, true);
+            }
+        }
+    }
+
+    _getClient(name, forceDiscover){
+        return new Promise((resolve, reject) => {
+            name = name.substring(0, 1).toUpperCase() + name.substring(1);
+            if (forceDiscover)
+                delete this.clients[name];
+
+            let client = this.clients[name];
+            if (client) {
+                resolve(client);
+            }
+            else {
+                wemo.discover(deviceInfo => {
+                    try {
+                        //console.log('discovered', deviceInfo.friendlyName);
+                        if (deviceInfo && deviceInfo.friendlyName == name){
+                            this.clients[name] = wemo.client(deviceInfo);
+                            resolve(this.clients[name]);
+                        }
+                    } 
+                    catch (e){
+                        console.log("Can't discover devices: " + e);
+                        reject(e);
+                    }
+                });
+            }
+        });
+    }
+
+    _getClientState(client){
+        return new Promise((resolve, reject) => {
+            try {
+                 client.getBinaryState((err, state) => {
+                     if (err)
+                        reject(err);
+                     else 
+                        resolve(state);
+                 });
+            }
+            catch (e){
+                reject(e);
+            }
+        });
+    }
+
+    _setClientState(client, newState){
+        return new Promise((resolve, reject) => {
+            try {
+                client.getBinaryState((err, state) => {
+                    state = state === 1 || state === '1' || state === true;
+                    if (err) {
+                        console.log("Error getting wemo state: " + err);
+                        reject(err);
+                    }
+                    else if (newState === undefined){
+                        console.log("Toggling wemo state from " + state + ".");
+                        client.setBinaryState(state ? 0 : 1);
+                        resolve(!!!state);
+                    }
+                    else if (state != !!newState){
+                        console.log("Setting wemo to state " + newState + ".");
+                        client.setBinaryState(newState ? 1 : 0);
+                        resolve(!!newState);
+                    }
+                    else {
+                        console.log("Wemo was already in state " + state + ".");
+                        resolve(!!state);
+                    }
+                });
+            }
+            catch (e) {
+                console.log("Can't communicate with Wemo: " + e);
+                reject(e);
+            }
+        });
     }
 }

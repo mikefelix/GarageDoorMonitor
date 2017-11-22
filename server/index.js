@@ -3,7 +3,7 @@ let http = require("http"),
     format = require("./format.js"),
     path = require("path"),
     request = require('request'),
-//    dash_button = require("node-dash-button"),
+    //    dash_button = require("node-dash-button"),
     moment = require("moment-timezone"),
     exec = require('child_process').exec,
     mail = require('./mail.js').send,
@@ -39,37 +39,35 @@ async function checkLamp(){
 
     if (time > sunrise && time < sunrise + 60000){
         console.log("Turning off all outer lights. The dawn has come!");
-        bulbs.toggle('outside');
+        bulbs.off('outside');
     }
 
     if (lampForced && date.getHours() == 4){
         lampForced = false;
     }
 
-    let lampState = (await bulbs.getBulbState('lamp')) === 1;
+    let lampState = await bulbs.getBulbState('lamp');
     let afterLampOn = time > lampOn;
     let afterLampOff = time > lampOff;
 
     if (!lampForced){
         if (!lampState && afterLampOn && !afterLampOff){
             console.log('Turn on lamp because current time', 
-                format(date), 
-                'is after lampOn time',
-                format(sunTimes.lampOn),
-                'and not after lampOff time',
-                format(sunTimes.lampOff));
+                    format(date), 
+                    'is after lampOn time',
+                    format(sunTimes.lampOn),
+                    'and not after lampOff time',
+                    format(sunTimes.lampOff));
 
             lampForced = false;
-            bulbs.on('Lamp');
+            bulbs.on('lamp');
         }
         else if (lampState && afterLampOff){
             console.log('Turn off lamp at ' + format(date));
             lampForced = false;
-            bulbs.off('Lamp');
+            bulbs.off('lamp');
         }
     }
-
-    setTimeout(checkLamp, 60000);
 }
 
 function reply(res, msg){
@@ -116,27 +114,27 @@ async function doOpen(uri, response){
 }
 
 /*
-dash.on("detected", function (dashId) {
-    console.log("Detected connection by " + dashId);
-    tessel.call('state', function(state){
-        if (state && typeof state == 'string'){
-            state = JSON.parse(state);
-        }
+   dash.on("detected", function (dashId) {
+   console.log("Detected connection by " + dashId);
+   tessel.call('state', function(state){
+   if (state && typeof state == 'string'){
+   state = JSON.parse(state);
+   }
 
-        if (!state) {
-            console.log("No state retrieved.");
-        }
-        else if (state.is_open){
-            console.log("Closing for dash");
-            tessel.call('close', function(){});
-        }
-        else {
-            console.log("Opening for dash");
-            doOpen('/open10');
-        }
-    });
-});
-*/
+   if (!state) {
+   console.log("No state retrieved.");
+   }
+   else if (state.is_open){
+   console.log("Closing for dash");
+   tessel.call('close', function(){});
+   }
+   else {
+   console.log("Opening for dash");
+   doOpen('/open10');
+   }
+   });
+   });
+   */
 process.on('uncaughtException', function (err) {
     console.error(new Date().toUTCString() + ' uncaughtException:', err.message);
     console.error(err.stack);
@@ -254,14 +252,14 @@ async function handleRequest(req){
         await bulbs.toggle('garage');
         return "Toggled garage.";
     }
-    /*else if (uri == '/home'){ 
-        console.log("Nest home at " + new Date());
-        exec('/home/felix/bin/snapshot.sh', function callback(error, stdout, stderr){
+    else if (uri == '/home'){ 
+        console.log("Nest reports people coming home at " + new Date());
+        /*exec('/home/felix/bin/snapshot.sh', function callback(error, stdout, stderr){
             if (error) console.log("Failed to save snapshot. " + error);
-        });
+        });*/
 
         reply(response, "Got it.");
-    }*/
+    }
     else if (uri.match(/^\/light/)){ // call from user
         if (/light_[a-z0-9]+/.test(uri)){
             let light = uri.match(/light_([a-z0-9]+)/)[1];
@@ -285,17 +283,23 @@ async function handleRequest(req){
 
 http.createServer((request, response) => {
     handleRequest(request)
-      .then(result => {
-          reply(response, result);
-      })
-      .catch(err => {
-          console.log('Error: ' + err);
-          reply(response, 500);
-      });
+    .then(result => {
+        reply(response, result);
+    })
+.catch(err => {
+    console.log('Error: ' + err);
+    reply(response, 500);
+});
 }).listen(8888);
 
-checkLamp();
+setInterval(checkLamp, 60000);
 
+let times = SunTimes.get(true);
 console.log("Process started. Times for today:");
-SunTimes.get(true);
+console.log('Current time is: ' + format(times.retrieved));
+console.log('Sunrise time is: ' + format(times.sunrise));
+console.log('Lamp on time is: ' + format(times.lampOn));
+console.log('Sunset time is: ' + format(times.sunset));
+console.log('Lamp off time is: ' + format(times.lampOff));
+
 

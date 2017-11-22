@@ -10,22 +10,20 @@ function req(method, url, body, retrying) {
         if (body)
             o.body = body;
 
-//        console.log(`${retrying ? 'Retry' : 'Try'} request to ${url}.`);
         method(o, (err, res, body) => {
+            console.log('Requesting', url);
             if (err){
                 if (retrying){
- //                   console.log(`Rejecting retried promise in hue request to ${url}: ${err}`);
                     reject(err);
                 }
                 else {
-  //                  console.log(`Retrying request to ${url} because ${err}`);
+                    console.log('Retrying', url);
                     req(method, url, body, true)
                       .then(res2 => resolve(res2))
                       .catch(err2 => reject(err2));
                 }
             }
             else {
-   //             console.log(`Resolving promise in hue request to ${url}`);
                 resolve(body);
             }
         });
@@ -38,6 +36,15 @@ module.exports = class Hue {
         this.bulbs = bulbs;
     }
 
+    _getBulbNumbers(bulb){
+        if (typeof bulb == 'string')
+            return this.bulbs[bulb];
+        else if (typeof bulb == 'number')
+            return [bulb];
+        else
+            return bulb;
+    }
+
     async getState(){
         let totalState = {};
         let keys = Object.keys(this.bulbs);
@@ -46,32 +53,31 @@ module.exports = class Hue {
             let bulbs = this.bulbs[name];
             for (let j = 0; j < bulbs.length; j++){
                 try {
-                    totalState[name] |= await this.getBulbState(bulbs[j]);
+                    let state = await this.getBulbState(bulbs[j]);
+                    totalState[name] = !!(totalState[name] || state);
+                    console.log(name, state);
                 }
                 catch (e){
-                    console.log(`Error getting hue state for bulb ${name}`);
+                    console.log(`Error getting hue state for bulb ${name}: ${e}`);
                 }
             }
         }
 
+        console.log('hue state in hue is'); console.dir(totalState);
         return totalState;
     }
 
-    async getBulbState(bulbs){
-        if (typeof bulb == 'string')
-            bulbs = this.bulbs[bulb];
-        else if (typeof bulb == 'number')
-            bulbs = [bulbs];
-
+    async getBulbState(bulb){
+        let bulbs = this._getBulbNumbers(bulb);
         let state = false;
+
         for (let i = 0; i < bulbs.length; i++){
-            let bulb = bulbs[i];
             try {
-                let body = await req(get, `${this.hueAddress}/${bulb}`);        
+                let body = await req(get, `${this.hueAddress}/${bulbs[i]}`);        
                 state |= body && /"on": ?true/.test(body); 
             }
             catch (e){
-                console.log(`Error getting bulb state for ${bulb}`);
+                console.log(`Error getting bulb state for ${bulb}: ${e}`);
                 return false;
             }
         }
@@ -79,13 +85,11 @@ module.exports = class Hue {
         return state;
     }
 
-    async toggle(bulbs, timeout) {
-        console.log(`Toggle ${bulbs} at ${new Date()}`);
-        if (typeof bulbs == 'number')
-            bulbs = [bulbs];
+    async toggle(bulb, timeout) {
+        console.log(`Toggle ${bulb} at ${new Date()}`);
+        let bulbs = this._getBulbNumbers(bulb);
 
         let ret = false;
-
         for (let i = 0; i < bulbs.length; i++){
             let bulb = bulbs[i];
             let body = await req(get, `${this.hueAddress}/${bulb}`);
@@ -99,10 +103,9 @@ module.exports = class Hue {
         return ret;
     }
 
-    async on(bulbs, timeout) {
-        console.log(`Turn on ${bulbs} at ${new Date()}`);
-        if (typeof bulbs == 'number')
-            bulbs = [bulbs];
+    async on(bulb, timeout) {
+        console.log(`Turn on ${bulb} at ${new Date()}`);
+        let bulbs = this._getBulbNumbers(bulb);
 
         for (let i = 0; i < bulbs.length; i++){
             let bulb = bulbs[i];
@@ -112,10 +115,9 @@ module.exports = class Hue {
         }
     }
 
-    async off(bulbs) {
-        console.log(`Turn off ${bulbs} at ${new Date()}`);
-        if (typeof bulbs == 'number')
-            bulbs = [bulbs];
+    async off(bulb) {
+        console.log(`Turn off ${bulb} at ${new Date()}`);
+        let bulbs = this._getBulbNumbers(bulb);
 
         for (let i = 0; i < bulbs.length; i++){
             let bulb = bulbs[i];

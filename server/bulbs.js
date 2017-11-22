@@ -1,16 +1,6 @@
 let Hue = require('./hue.js'),
     Wemo = require('./wemo.js');
 
-let isWemo = function(name) {
-    name = name.toLowerCase();
-    return name == 'aquarium' || name == 'lamp';
-}
-
-let isHue = function(name) {
-    name = name.toLowerCase();
-    return name == 'breezeway' || name == 'garage' || name == 'driveway' || name == 'driveway';
-}
-
 let doAfterSeconds = (doThis, after) => {
     setTimeout(doThis, after * 1000);
 }
@@ -28,12 +18,28 @@ module.exports = class Bulbs {
         this.wemo = new Wemo(this.wemoBulbs);
     }
 
+    _isHue(name){
+        return this.hueBulbs.hasOwnProperty(name.toLowerCase());
+    }
+
+    _isWemo(name){
+        return this.wemoBulbs.indexOf(name.toLowerCase()) >= 0;
+    }
+
     async getBulbState(name){
-        if (isHue(name)){
-            return await this.hue.getBulbState(name);
+        try {
+            if (this._isHue(name)){
+                let state = await this.hue.getBulbState(name);
+                return state;
+            }
+            else if (this._isWemo(name)){
+                let state = await this.wemo.getBulbState(name);
+                return state;
+            }
         }
-        else if (isWemo(name)){
-            return await this.wemo.getBulbState(name);
+        catch (e){
+            console.log("Couldn't get state for bulb", name, ":", e);
+            return false;
         }
     }
 
@@ -45,7 +51,7 @@ module.exports = class Bulbs {
     }
 
     async on(bulbName, time){
-        if (isHue(bulbName)){
+        if (this._isHue(bulbName)){
             let bulbs = this.hueBulbs[bulbName];
             for (let i = 0; i < bulbs.length; i++)
                 this.hue.on(bulbs[i]);
@@ -59,7 +65,7 @@ module.exports = class Bulbs {
 
             return true;
         }
-        else if (isWemo(bulbName)){
+        else if (this._isWemo(bulbName)){
             this.wemo.on(bulbName.substring(0, 1).toUpperCase() + bulbName.substring(1));
             if (time){
                 doAfterSeconds(() => {
@@ -70,29 +76,29 @@ module.exports = class Bulbs {
             return true;
         }
         else {
-            return false;
+            throw 'Unknown bulb ' + bulbName;
         }
     }
 
     async off(bulbName){
-        if (isHue(bulbName)){
+        if (this._isHue(bulbName)){
             let bulbs = this.hueBulbs[bulbName];
             for (let i = 0; i < bulbs.length; i++)
                 this.hue.off(bulbs[i]);
 
             return true;
         }
-        else if (isWemo(bulbName)){
+        else if (this._isWemo(bulbName)){
             this.wemo.off(bulbName.substring(0, 1).toUpperCase() + bulbName.substring(1));
             return true;
         }
         else {
-            return false;
+            throw 'Unknown bulb ' + bulbName;
         }
     }
 
     async toggle(bulbName, time){
-        if (isHue(bulbName)){
+        if (this._isHue(bulbName)){
             let bulbs = this.hueBulbs[bulbName];
             let state = false;
             for (let i = 0; i < bulbs.length; i++)
@@ -105,11 +111,11 @@ module.exports = class Bulbs {
                 }, time);
             }
                     
-            return true;
+            return state;
         }
-        else if (isWemo(bulbName)){
+        else if (this._isWemo(bulbName)){
             let bulb = bulbName.substring(0, 1).toUpperCase() + bulbName.substring(1)
-            this.wemo.toggle(bulb);
+            let res = this.wemo.toggle(bulb);
 
             if (time){
                 doAfterSeconds(() => {
@@ -117,10 +123,10 @@ module.exports = class Bulbs {
                 }, time);
             }
 
-            return true;
+            return res;
         }
         else {
-            return false;
+            throw 'Unknown bulb ' + bulbName;
         }
     }
 }
