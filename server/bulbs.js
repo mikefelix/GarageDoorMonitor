@@ -52,28 +52,22 @@ module.exports = class Bulbs {
 
     async on(bulbName, time){
         if (this._isHue(bulbName)){
-            let bulbs = this.hueBulbs[bulbName];
-            for (let i = 0; i < bulbs.length; i++)
-                this.hue.on(bulbs[i]);
+            let res = this.hue.on(bulbName);
 
             if (time){
-                doAfterSeconds(() => {
-                    for (let i = 0; i < bulbs.length; i++)
-                        this.hue.off(bulbs[i]);
-                }, time);
+                doAfterSeconds(() => this.hue.off(bulbName), time);
             }
 
-            return true;
+            return await res;
         }
         else if (this._isWemo(bulbName)){
-            this.wemo.on(bulbName.substring(0, 1).toUpperCase() + bulbName.substring(1));
+            let res = this.wemo.on(bulbName.substring(0, 1).toUpperCase() + bulbName.substring(1));
+
             if (time){
-                doAfterSeconds(() => {
-                    this.wemo.off(bulbName);
-                }, time);
+                doAfterSeconds(() => this.wemo.off(bulbName), time);
             }
 
-            return true;
+            return await res;
         }
         else {
             throw 'Unknown bulb ' + bulbName;
@@ -82,15 +76,10 @@ module.exports = class Bulbs {
 
     async off(bulbName){
         if (this._isHue(bulbName)){
-            let bulbs = this.hueBulbs[bulbName];
-            for (let i = 0; i < bulbs.length; i++)
-                this.hue.off(bulbs[i]);
-
-            return true;
+            return await this.hue.off(bulbName);
         }
         else if (this._isWemo(bulbName)){
-            this.wemo.off(bulbName.substring(0, 1).toUpperCase() + bulbName.substring(1));
-            return true;
+            return await this.wemo.off(bulbName.substring(0, 1).toUpperCase() + bulbName.substring(1));
         }
         else {
             throw 'Unknown bulb ' + bulbName;
@@ -99,31 +88,23 @@ module.exports = class Bulbs {
 
     async toggle(bulbName, time){
         if (this._isHue(bulbName)){
-            let bulbs = this.hueBulbs[bulbName];
-            let state = false;
-            for (let i = 0; i < bulbs.length; i++)
-                state |= this.hue.toggle(bulbs[i]);
+            let toggled = this.hue.toggle(bulbName);
 
             if (time){
-                doAfterSeconds(() => {
-                    for (let i = 0; i < bulbs.length; i++)
-                        this.hue.toggle(bulbs[i]);
-                }, time);
+                doAfterSeconds(() => this.hue.toggle(bulbName), time);
             }
                     
-            return state;
+            return await toggled;
         }
         else if (this._isWemo(bulbName)){
             let bulb = bulbName.substring(0, 1).toUpperCase() + bulbName.substring(1)
             let res = this.wemo.toggle(bulb);
 
             if (time){
-                doAfterSeconds(() => {
-                    this.wemo.toggle(bulb);
-                }, time);
+                doAfterSeconds(() => this.wemo.toggle(bulbName), time);
             }
 
-            return res;
+            return await res;
         }
         else {
             throw 'Unknown bulb ' + bulbName;

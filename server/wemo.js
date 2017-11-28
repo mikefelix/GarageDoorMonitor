@@ -32,17 +32,19 @@ module.exports = class Wemo {
     }
 
     async on(name, timeout){
-        this._changeState(name, true);
+        let res = this._changeState(name, true);
         if (timeout) setTimeout(() => this.off(name), timeout);
+        return await res;
     }
 
     async off(name){ 
-        this._changeState(name, false);
+        return await this._changeState(name, false);
     }
 
     async toggle(name, timeout){ 
-        this._changeState(name);
+        let res = this._changeState(name);
         if (timeout) setTimeout(() => this.toggle(name), timeout);
+        return await res;
     }
     
     async _changeState(name, newState, retrying){

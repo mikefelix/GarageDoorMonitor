@@ -1,48 +1,9 @@
-let {get, post} = require('request');
-
-function req(method, url, body, retrying) {
-    return new Promise((resolve, reject) => {
-        let o = {
-            headers: {'content-type' : 'application/json'},
-            url: url
-        }
-        
-        if (body)
-            o.body = body;
-
-        method(o, (err, res, body) => {
-            console.log('Requesting', url);
-            if (err){
-                if (retrying){
-                    reject(err);
-                }
-                else {
-                    console.log('Retrying', url);
-                    req(method, url, body, true)
-                      .then(res2 => resolve(res2))
-                      .catch(err2 => reject(err2));
-                }
-            }
-            else {
-                resolve(body);
-            }
-        });
-    });
-}    
+let {get, put} = require('request');
 
 module.exports = class Hue {
     constructor(address, bulbs){
         this.hueAddress = address;
         this.bulbs = bulbs;
-    }
-
-    _getBulbNumbers(bulb){
-        if (typeof bulb == 'string')
-            return this.bulbs[bulb];
-        else if (typeof bulb == 'number')
-            return [bulb];
-        else
-            return bulb;
     }
 
     async getState(){
@@ -55,7 +16,6 @@ module.exports = class Hue {
                 try {
                     let state = await this.getBulbState(bulbs[j]);
                     totalState[name] = !!(totalState[name] || state);
-                    console.log(name, state);
                 }
                 catch (e){
                     console.log(`Error getting hue state for bulb ${name}: ${e}`);
@@ -63,7 +23,6 @@ module.exports = class Hue {
             }
         }
 
-        console.log('hue state in hue is'); console.dir(totalState);
         return totalState;
     }
 
@@ -73,7 +32,7 @@ module.exports = class Hue {
 
         for (let i = 0; i < bulbs.length; i++){
             try {
-                let body = await req(get, `${this.hueAddress}/${bulbs[i]}`);        
+                let body = await this._req(get, bulbs[i]);        
                 state |= body && /"on": ?true/.test(body); 
             }
             catch (e){
@@ -92,10 +51,10 @@ module.exports = class Hue {
         let ret = false;
         for (let i = 0; i < bulbs.length; i++){
             let bulb = bulbs[i];
-            let body = await req(get, `${this.hueAddress}/${bulb}`);
+            let body = await this._req(get, bulb);
             let on = body && /"on": ?true/.test(body);
-            req(post, `${this.hueAddress}/${bulb}/state`, JSON.stringify({on}));
-            ret |= on;
+            this._req(put, `${bulb}/state`, JSON.stringify({on: !on}));
+            ret |= !on;
             if (timeout)
                 setTimeout(() => this.toggle(bulb), timeout);
         }
@@ -109,7 +68,7 @@ module.exports = class Hue {
 
         for (let i = 0; i < bulbs.length; i++){
             let bulb = bulbs[i];
-            req(post, `${this.hueAddress}/${bulb}/state`, JSON.stringify({on:true}));
+            this._req(put, `${bulb}/state`, JSON.stringify({on:true}));
             if (timeout)
                 setTimeout(() => this.toggle(bulb), timeout);
         }
@@ -121,9 +80,48 @@ module.exports = class Hue {
 
         for (let i = 0; i < bulbs.length; i++){
             let bulb = bulbs[i];
-            req(post, `${this.hueAddress}/${bulb}/state`, JSON.stringify({on:false}));
+            this._req(put, `${bulb}/state`, JSON.stringify({on:false}));
         }
     }
+
+    _getBulbNumbers(bulb){
+        if (typeof bulb == 'string')
+            return this.bulbs[bulb];
+        else if (typeof bulb == 'number')
+            return [bulb];
+        else
+            return bulb;
+    }
+
+    _req(method, endpoint, body, retrying) {
+        return new Promise((resolve, reject) => {
+            let o = {
+                headers: {'content-type' : 'application/json'},
+                url: `${this.hueAddress}/${endpoint}`
+            }
+            
+            if (body)
+                o.body = body;
+
+            //console.log('Requesting', url, 'with body', body);
+            method(o, (err, res, body) => {
+                if (err){
+                    if (retrying){
+                        reject(err);
+                    }
+                    else {
+                        console.log('Retrying', url);
+                        req(method, url, body, true)
+                          .then(res2 => resolve(res2))
+                          .catch(err2 => reject(err2));
+                    }
+                }
+                else {
+                    resolve(body);
+                }
+            });
+        });
+    }    
 
 }
 
