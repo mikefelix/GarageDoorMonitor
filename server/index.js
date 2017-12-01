@@ -3,7 +3,6 @@ let http = require("http"),
     format = require("./format.js"),
     path = require("path"),
     request = require('request'),
-    //    dash_button = require("node-dash-button"),
     moment = require("moment-timezone"),
     exec = require('child_process').exec,
     mail = require('./mail.js').send,
@@ -17,7 +16,6 @@ if (!process.argv[6]){
 }
 
 const garageButtonMac = "50:f5:da:90:d1:fa";
-//const dash = dash_button([garageButtonMac]);
 const port = process.argv[2]; 
 const emailAddress = process.argv[3];
 const tessel = new Tessel(process.argv[4]);
@@ -41,7 +39,7 @@ async function checkLamp(){
 
     if (time > sunrise && time < sunrise + 60000){
         console.log("Turning off all outer lights. The dawn has come!");
-        bulbs.off('outside');
+        bulbs.off('outside', 'dawn');
         drivewayOn = false;
     }
 
@@ -49,7 +47,8 @@ async function checkLamp(){
         lampForced = false;
     }
 
-    let lampState = await bulbs.getBulbState('lamp');
+    let lamp = await bulbs.getBulb('lamp');
+    let lampState = lamp.state;
     let afterLampOn = time > lampOn;
     let afterLampOff = time > lampOff;
 
@@ -88,7 +87,7 @@ function reply(res, msg){
     }
     else if (typeof msg == 'string'){
         res.writeHead(200, headers);
-        res.end(msg);
+        res.end(JSON.stringify({result:msg}));
     }
 
     res.end();
@@ -98,46 +97,22 @@ async function doOpen(uri, response){
     if (/open[0-9]+/.test(uri)){
         let time = uri.match(/open([0-9]+)/)[1];
         console.log((!response ? 'Button' : 'App') + ' open ' + time + ' command received at ' + new Date());
-        let msg = await tessel.call('open' + time);
+        let msg = await tessel.post('open' + time);
         console.log('Tessel replies: ' + msg);
         if (response) reply(response, msg);        
     }
     else {
         console.log('Open indefinitely command received at ' + new Date());
-        let msg = tessel.call('open0');
+        let msg = tessel.post('open0');
         console.log('Tessel replies: ' + msg);
         if (response) reply(response, msg);
     }
 
     if (SunTimes.isNight()){
-        bulbs.on('garage', 180);
-        bulbs.on('driveway', 180);
-        bulbs.on('breezeway', 180);
+        bulbs.on('outside', 180, 'garage opened at night');
     }
 }
 
-/*
-   dash.on("detected", function (dashId) {
-   console.log("Detected connection by " + dashId);
-   tessel.call('state', function(state){
-   if (state && typeof state == 'string'){
-   state = JSON.parse(state);
-   }
-
-   if (!state) {
-   console.log("No state retrieved.");
-   }
-   else if (state.is_open){
-   console.log("Closing for dash");
-   tessel.call('close', function(){});
-   }
-   else {
-   console.log("Opening for dash");
-   doOpen('/open10');
-   }
-   });
-   });
-   */
 process.on('uncaughtException', function (err) {
     console.error(new Date().toUTCString() + ' uncaughtException:', err.message);
     console.error(err.stack);
@@ -147,30 +122,39 @@ process.on('unhandledRejection', (reason, promise) => {
     console.log('Unhandled promise rejection. Reason: ' + reason);
 });
 
-async function handleRequest(req, response){
-    let uri = req.url;
-    console.log('Received call at ' + format(new Date()) + ': ' + uri);
+function verifyAuth(req){
+    if (new RegExp('auth=' + authKey).test(req.url))
+        return true;
+    if (req.headers.Authorization == authKey)
+        return true;
+
+    return false;
+}
+
+async function handleRequest(request, response){
+    let req = request.method + ' ' + request.url;
+    console.log(`Received call at ${format(new Date())}: ${req}`);
 
     try {
-        if (uri == '/warn1'){
+        if (req == 'POST /warn1'){
             return "OK";
         }
-        else if (uri == '/warn2'){
+        if (req == 'POST /warn2'){
             mail("Garage failed to close", "Garage didn't shut when I tried. Trying again.");
             return "OK";
         }
-        else if (uri == '/warn3'){
+        if (req == 'POST /warn3'){
             mail("Garage is stuck open!", "Garage is open and I cannot shut it! I tried twice.");
             return "OK";
         }
-        else if (uri == '/alive'){ // ping from tessel
+        if (req == 'POST /alive'){ // ping from tessel
             console.log("Tessel reports that it is alive at " + new Date());
             return "Yay!";
         }
-        else if (uri.match(/^\/opened/)){ // call from tessel
+        if (req.match(/^POST \/opened/)){ // call from tessel
             let t = 'indefinitely';
-            if (uri.match(/[0-9]+/))
-                t = uri.match(/[0-9]+/)[0];
+            if (req.match(/[0-9]+/))
+                t = req.match(/[0-9]+/)[0];
 
             if (SunTimes.isNight())
                 bulbs.on('outside', 180);
@@ -178,14 +162,14 @@ async function handleRequest(req, response){
             console.log(`Tessel reports opened ${t} state at ${new Date()}`);
             return "opened alert received";
         }
-        else if (uri == '/closed'){ // call from tessel
+        if (req == 'POST /closed'){ // call from tessel
             console.log('Tessel reports closed state at ' + new Date());
             return "closed alert received";
         }
-        else if (uri.match(/^\/close/)){ // call from user
-            if (new RegExp('auth=' + authKey).test(req.url)){
+        if (req.match(/^POST \/close/)){ // call from user
+            if (verifyAuth(request)){
                 console.log('Close command received at ' + new Date());
-                let msg = await tessel.call('close');
+                let msg = await tessel.post('close');
                 console.log('Tessel replies: ' + msg);
                 return msg;
             }
@@ -194,9 +178,9 @@ async function handleRequest(req, response){
                 return 401;
             }
         }
-        else if (uri.match(/^\/open/)){ // call from user
-            if (new RegExp('auth=' + authKey).test(uri)){
-                doOpen(req.url, response);
+        if (req.match(/^POST \/open/)){ // call from user
+            if (verifyAuth(request)){
+                doOpen(request.url, response);
                 return 200;
             }
             else {
@@ -204,9 +188,9 @@ async function handleRequest(req, response){
                 return 401;
             }
         }
-        else if (uri == '/time'){ // call from user
+        if (req == 'GET /time'){ // call from user
             let sun = SunTimes.get();
-            let state = {
+            return {
                 is_night: SunTimes.isNight(), 
                 sunrise: format(sun.sunrise, true),
                 sunset: format(sun.sunset, true),
@@ -214,11 +198,9 @@ async function handleRequest(req, response){
                 lampOff: format(sun.lampOff, true),
                 current: format(new Date(), true)
             };
-
-            return state;
         }
-        else if (uri == '/state'){ // call from user
-            let tesselState = await tessel.call('state');
+        if (req == 'GET /state'){ // call from user
+            let tesselState = await tessel.get('state');
             let state;
             try {
                 state = JSON.parse(tesselState);
@@ -231,32 +213,11 @@ async function handleRequest(req, response){
             state.bulbs = await bulbs.getState();
             return state;
         }
-        else if (uri == '/outside'){
-            let newState = await bulbs.toggle('outside');        
-            return 'Toggling outside devices to ' + newState + '.';
-        }
-        else if (uri == '/aquarium'){
-            let newState = await bulbs.toggle('aquarium');
-            return `Toggled aquarium to ${newState}.`;
-        }
-        else if (uri == '/lamp'){
-            lampForced = true;
-            let newState = await bulbs.toggle('lamp');
-            return `Toggled lamp to ${newState}.`;
-        }
-        else if (uri == '/driveway'){
-            let newState = await bulbs.toggle('driveway');
-            return `Toggled driveway to ${newState}.`;
-        }
-        else if (uri == '/breezeway'){
-            let newState = await bulbs.toggle('breezeway');
-            return `Toggled breezeway to ${newState}`;
-        }
-        else if (uri == '/garage'){
-            let newState = await bulbs.toggle('garage');
+        if (req == 'POST /garage'){
+            let newState = await bulbs.toggle('garage', req);
             return `Toggled garage to ${newState}.`;
         }
-        else if (uri == '/home'){ 
+        if (req == 'POST /home' || req == 'GET /home'){ 
             console.log("Nest reports people coming home at " + new Date());
             /*exec('/home/felix/bin/snapshot.sh', function callback(error, stdout, stderr){
                 if (error) console.log("Failed to save snapshot. " + error);
@@ -264,28 +225,28 @@ async function handleRequest(req, response){
 
             reply(response, "Got it.");
         }
-        else if (uri.match(/^\/light/)){ // call from user
-            if (/light_[a-z0-9]+/.test(uri)){
-                let light = uri.match(/light_([a-z0-9]+)/)[1];
-                if (light.toLowerCase() == 'lamp')
+    
+        let [u, meth, light] = req.match(/(POST|GET) \/light\/([a-z0-9]+)/);
+        if (light){
+            if (meth == 'GET')
+                return await bulbs.getBulb(light);
+            
+            if (meth == 'POST'){
+                if (light == 'lamp')
                     lampForced = true;
 
-                if (await bulbs.toggle(light))
-                    return 200;
-                else
-                    return 404;
+                let res = await bulbs.toggle(light, req);
+                return `Toggled ${light} to ${res ? 'on' : 'off'}.`;
             }
-            else {
-                return 404;
-            }
+
+            return 406;
         }
-        else {
-            console.log('Unknown URI: ' + uri);
-            return 404;
-        }
+
+        console.log('Unknown URI: ' + req);
+        return 404;
     } 
     catch (e){
-        console.log(`Error during request ${uri}: ${e}`);
+        console.log(`Error during request ${req}: ${e}`);
         return 500;
     }
 }
@@ -313,8 +274,8 @@ console.log('Lamp off time is: ' + format(times.lampOff));
 
 setInterval(async () => {
    if (!drivewayOn){
-       let state = await bulbs.getState('driveway');
-       if (state.driveway){
+       let bulb = await bulbs.getBulb('driveway');
+       if (bulb.state){
            drivewayOn = true;
            console.log(`I see the driveway on at ${format(new Date())}.`);
        }

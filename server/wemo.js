@@ -26,25 +26,25 @@ module.exports = class Wemo {
     }
 
     async getBulbState(bulb){
+        bulb = this._lowercase(bulb);
         let client = await this._getClient(bulb);
         let state = await this._getClientState(client);
         return state === '1' || state === 1 || state === true;
     }
 
-    async on(name, timeout){
-        let res = this._changeState(name, true);
-        if (timeout) setTimeout(() => this.off(name), timeout);
-        return await res;
+    on(name, timeout){
+        name = this._lowercase(name);
+        return this._changeState(name, true);
     }
 
-    async off(name){ 
-        return await this._changeState(name, false);
+    off(name){ 
+        name = this._lowercase(name);
+        return this._changeState(name, false);
     }
 
-    async toggle(name, timeout){ 
-        let res = this._changeState(name);
-        if (timeout) setTimeout(() => this.toggle(name), timeout);
-        return await res;
+    toggle(name, timeout){ 
+        name = this._lowercase(name);
+        return this._changeState(name);
     }
     
     async _changeState(name, newState, retrying){
@@ -137,5 +137,9 @@ module.exports = class Wemo {
                 reject(e);
             }
         });
+    }
+
+    _lowercase(name){
+        return name.substring(0, 1).toUpperCase() + name.substring(1);
     }
 }

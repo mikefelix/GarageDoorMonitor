@@ -1,7 +1,8 @@
 let Hue = require('./hue.js'),
-    Wemo = require('./wemo.js');
+    Wemo = require('./wemo.js'),
+    format = require('./format.js');
 
-let doAfterSeconds = (doThis, after) => {
+let doAfterSeconds = (after, doThis) => {
     setTimeout(doThis, after * 1000);
 }
 
@@ -12,10 +13,53 @@ module.exports = class Bulbs {
             garage: [1],
             breezeway: [2],
             driveway: [3,4],
-            outside: [1,2,3,4]
+            outside: ['garage','breezeway','driveway']
         };
+
         this.hue = new Hue(hueAddress, this.hueBulbs);
         this.wemo = new Wemo(this.wemoBulbs);
+        this.history = {};
+
+        for (let bulb in this.hueBulbs){
+            this.history[bulb] = {};
+        }
+
+        for (let bulb of this.wemoBulbs){
+            this.history[bulb] = {};
+        }
+    }
+
+    async getBulb(name){
+        try {
+            let state;
+            if (this._isHue(name)){
+                state = await this.hue.getBulbState(name);
+            }
+            else if (this._isWemo(name)){
+                state = await this.wemo.getBulbState(name);
+            }
+
+            return {
+                state: state,
+                history: this.history[name]
+            };
+        }
+        catch (e){
+            console.log("Couldn't get state for bulb", name, ":", e);
+            return false;
+        }
+    }
+
+    on(bulbName){ return this._handle(bulbName, 'on', this._getSource(arguments), this._getDelay(arguments)); }
+    off(bulbName){ return this._handle(bulbName, 'off', this._getSource(arguments), this._getDelay(arguments)); }
+    toggle(bulbName){ return this._handle(bulbName, 'toggle', this._getSource(arguments), this._getDelay(arguments)); }
+
+    async getState(){
+        let hueState = await this.hue.getState();
+        let wemoState = await this.wemo.getState();
+        let state = Object.assign(wemoState, hueState);
+        state.history = this.history;
+        return state;
     }
 
     _isHue(name){
@@ -26,88 +70,72 @@ module.exports = class Bulbs {
         return this.wemoBulbs.indexOf(name.toLowerCase()) >= 0;
     }
 
-    async getBulbState(name){
-        try {
-            if (this._isHue(name)){
-                let state = await this.hue.getBulbState(name);
-                return state;
+    _getSource(args){
+        let source;
+        if (typeof args[1] == 'string') source = args[1]; 
+        if (typeof args[2] == 'string') source = args[2]; 
+        return source;
+    }
+
+    _getDelay(args){
+        if (typeof args[1] == 'number') return args[1]; 
+        if (typeof args[2] == 'number') return args[2]; 
+        return undefined;
+    }
+
+    _record(bulbName, action, source){
+        let record = this.history[bulbName];
+        if (!record) 
+            throw 'Cannot get history for ' + bulbName;
+
+        let event = record[action];
+        if (!event) 
+            event = record[action] = {};
+
+        event.date = format(new Date(), true);
+        event.source = source;
+        
+        if (this._isHue[bulbName]){
+            for (let bulb in this.hueBulbs[bulbName]){
+                if (typeof bulb == 'string'){
+                    this._record(bulb, action, source);
+                }
             }
-            else if (this._isWemo(name)){
-                let state = await this.wemo.getBulbState(name);
-                return state;
-            }
-        }
-        catch (e){
-            console.log("Couldn't get state for bulb", name, ":", e);
-            return false;
         }
     }
 
-    async getState(){
-        let hueState = await this.hue.getState();
-        let wemoState = await this.wemo.getState();
-        let state = Object.assign(wemoState, hueState);
-        return state;
-    }
-
-    async on(bulbName, time){
-        if (this._isHue(bulbName)){
-            let res = this.hue.on(bulbName);
-
-            if (time){
-                doAfterSeconds(() => this.hue.off(bulbName), time);
-            }
-
-            return await res;
-        }
-        else if (this._isWemo(bulbName)){
-            let res = this.wemo.on(bulbName.substring(0, 1).toUpperCase() + bulbName.substring(1));
-
-            if (time){
-                doAfterSeconds(() => this.wemo.off(bulbName), time);
-            }
-
-            return await res;
-        }
-        else {
+    _handle(bulbName, action, source, delay){
+        let handler;
+        if (this._isHue(bulbName))
+            handler = this.hue;
+        else if (this._isWemo(bulbName))
+            handler = this.wemo;
+        else 
             throw 'Unknown bulb ' + bulbName;
+
+        let act, react;
+        if (action == 'on')
+            [act, react] = [handler.on, handler.off];
+        else if (action == 'off')
+            [act, react] = [handler.off, undefined];
+        else if (action == 'toggle')
+            [act, react] = [handler.toggle, handler.toggle];
+        else
+            throw 'Unknown action ' + action;
+
+        if (delay && react){
+            doAfterSeconds(delay, () => {
+                this._record(bulbName, 'undo ' + action, 'delay');
+                react.call(handler, bulbName, delay);
+            });
         }
+
+        let res = act.call(handler, bulbName);
+        if (action == 'toggle')
+            action = action + (res ? ' on' : ' off');
+
+        this._record(bulbName, action, source || 'unknown');
+        return res;
     }
 
-    async off(bulbName){
-        if (this._isHue(bulbName)){
-            return await this.hue.off(bulbName);
-        }
-        else if (this._isWemo(bulbName)){
-            return await this.wemo.off(bulbName.substring(0, 1).toUpperCase() + bulbName.substring(1));
-        }
-        else {
-            throw 'Unknown bulb ' + bulbName;
-        }
-    }
-
-    async toggle(bulbName, time){
-        if (this._isHue(bulbName)){
-            let toggled = this.hue.toggle(bulbName);
-
-            if (time){
-                doAfterSeconds(() => this.hue.toggle(bulbName), time);
-            }
-                    
-            return await toggled;
-        }
-        else if (this._isWemo(bulbName)){
-            let bulb = bulbName.substring(0, 1).toUpperCase() + bulbName.substring(1)
-            let res = this.wemo.toggle(bulb);
-
-            if (time){
-                doAfterSeconds(() => this.wemo.toggle(bulbName), time);
-            }
-
-            return await res;
-        }
-        else {
-            throw 'Unknown bulb ' + bulbName;
-        }
-    }
 }

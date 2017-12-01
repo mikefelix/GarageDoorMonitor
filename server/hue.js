@@ -1,4 +1,5 @@
-let {get, put} = require('request');
+let {get, put} = require('request'),
+    Q = require('q');
 
 module.exports = class Hue {
     constructor(address, bulbs){
@@ -33,7 +34,8 @@ module.exports = class Hue {
         for (let i = 0; i < bulbs.length; i++){
             try {
                 let body = await this._req(get, bulbs[i]);        
-                state |= body && /"on": ?true/.test(body); 
+                if (!body) throw 'Response is empty';
+                state |= /"on": ?true/.test(body);
             }
             catch (e){
                 console.log(`Error getting bulb state for ${bulb}: ${e}`);
@@ -41,46 +43,80 @@ module.exports = class Hue {
             }
         }
 
-        return state;
+        return !!state;
     }
 
     async toggle(bulb, timeout) {
         console.log(`Toggle ${bulb} at ${new Date()}`);
         let bulbs = this._getBulbNumbers(bulb);
+        if (typeof bulbs[0] == 'string'){
+            let promises = [];
+            for (let i = 0; i < bulbs.length; i++){
+                console.log(`As part of "toggle" for ${bulb}, toggling ${bulbs[i]}`);
+                promises.push(this.toggle(bulbs[i], timeout));
+            }
 
-        let ret = false;
-        for (let i = 0; i < bulbs.length; i++){
-            let bulb = bulbs[i];
-            let body = await this._req(get, bulb);
-            let on = body && /"on": ?true/.test(body);
-            this._req(put, `${bulb}/state`, JSON.stringify({on: !on}));
-            ret |= !on;
-            if (timeout)
-                setTimeout(() => this.toggle(bulb), timeout);
+            return await Q.all(promises);
         }
+        else {
+            let ret = false;
+            for (let i = 0; i < bulbs.length; i++){
+                let bulb = bulbs[i];
+                let body = await this._req(get, bulb);
+                let on = body && /"on": ?true/.test(body);
+                this._req(put, `${bulb}/state`, JSON.stringify({on: !on}));
+                ret |= !on;
+                if (timeout)
+                    setTimeout(() => this.toggle(bulb), timeout);
+            }
 
-        return ret;
+            return ret;
+        }
     }
 
     async on(bulb, timeout) {
         console.log(`Turn on ${bulb} at ${new Date()}`);
         let bulbs = this._getBulbNumbers(bulb);
+        if (typeof bulbs[0] == 'string'){
+            let promises = [];
+            for (let i = 0; i < bulbs.length; i++){
+                console.log(`As part of "on" for ${bulb}, turning on ${bulbs[i]}`);
+                promises.push(this.on(bulbs[i], timeout));
+            }
 
-        for (let i = 0; i < bulbs.length; i++){
-            let bulb = bulbs[i];
-            this._req(put, `${bulb}/state`, JSON.stringify({on:true}));
-            if (timeout)
-                setTimeout(() => this.toggle(bulb), timeout);
+            return await Q.all(promises);
+        }
+        else {
+            for (let i = 0; i < bulbs.length; i++){
+                let bulb = bulbs[i];
+                this._req(put, `${bulb}/state`, JSON.stringify({on:true}));
+                if (timeout)
+                    setTimeout(() => this.toggle(bulb), timeout);
+            }
+
+            return true;
         }
     }
 
     async off(bulb) {
         console.log(`Turn off ${bulb} at ${new Date()}`);
         let bulbs = this._getBulbNumbers(bulb);
+        if (typeof bulbs[0] == 'string'){
+            let promises = [];
+            for (let i = 0; i < bulbs.length; i++){
+                console.log(`As part of "off" for ${bulb}, turning off ${bulbs[i]}`);
+                promises.push(this.off(bulbs[i]));
+            }
 
-        for (let i = 0; i < bulbs.length; i++){
-            let bulb = bulbs[i];
-            this._req(put, `${bulb}/state`, JSON.stringify({on:false}));
+            return await Q.all(promises);
+        }
+        else {
+            for (let i = 0; i < bulbs.length; i++){
+                let bulb = bulbs[i];
+                this._req(put, `${bulb}/state`, JSON.stringify({on:false}));
+            }
+
+            return false;
         }
     }
 
