@@ -1,12 +1,13 @@
 {
   "name": "server",
   "version": "0.0.0",
-  "description": "Tessel project",
+  "description": "Home automation project",
   "main": "index.js",
   "dependencies": {
     "moment-timezone": "^0.5.11",
-    "node-dash-button": "^0.6.1",
+    "q": "^1.5.1",
     "request": "~2.72.0",
+    "suncalc": "^1.8.0",
     "wemo-client": "^0.11.2"
   },
   "devDependencies": {},
@@ -15,8 +16,8 @@
   },
   "repository": "www.github.com/tessel/t2-cli",
   "keywords": [
-    "Tessel"
+    "Home automation"
   ],
   "license": "MIT",
-  "readme": "A bare bones Tessel 2 blinky script."
+  "readme": "Home automation"
 }
