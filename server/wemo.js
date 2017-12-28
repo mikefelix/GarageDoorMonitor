@@ -117,17 +117,17 @@ module.exports = class Wemo {
                         reject(err);
                     }
                     else if (newState === undefined){
-                        console.log("Toggling wemo state from " + state + ".");
+                        //console.log("Toggling wemo state from " + state + ".");
                         client.setBinaryState(state ? 0 : 1);
                         resolve(!!!state);
                     }
                     else if (state != !!newState){
-                        console.log("Setting wemo to state " + newState + ".");
+                        //console.log("Setting wemo to state " + newState + ".");
                         client.setBinaryState(newState ? 1 : 0);
                         resolve(!!newState);
                     }
                     else {
-                        console.log("Wemo was already in state " + state + ".");
+                        //console.log("Wemo was already in state " + state + ".");
                         resolve(!!state);
                     }
                 });

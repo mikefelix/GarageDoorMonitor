@@ -25,9 +25,7 @@ const hueAddress = `http://192.168.0.115/api/${hueKey}/lights`;
 const bulbs = new Bulbs(hueAddress);
 const currentWeatherUri = 'http://mozzarelly.com/weather/current';
 
-let drivewayOn = false;
-
-let lampForced = false, outerLightsForced = false;
+let lampForced = false, outerLightsForced = false, drivewayForced = false, recentLambda = false;
 
 async function checkLamp(){
     let date = new Date();
@@ -40,7 +38,7 @@ async function checkLamp(){
     if (time > sunrise && time < sunrise + 60000){
         console.log("Turning off all outer lights. The dawn has come!");
         bulbs.off('outside', 'dawn');
-        drivewayOn = false;
+        drivewayForced = false;
     }
 
     if (lampForced && date.getHours() == 4){
@@ -93,23 +91,20 @@ function reply(res, msg){
     res.end();
 }
 
-async function doOpen(uri, response){
+async function doOpen(uri){
+    if (SunTimes.isNight()){
+        bulbs.on('outside', 180, 'garage opened at night');
+        drivewayForced = true;
+    }
+    
     if (/open[0-9]+/.test(uri)){
         let time = uri.match(/open([0-9]+)/)[1];
         console.log((!response ? 'Button' : 'App') + ' open ' + time + ' command received at ' + new Date());
-        let msg = await tessel.post('open' + time);
-        console.log('Tessel replies: ' + msg);
-        if (response) reply(response, msg);        
+        return await tessel.post('open' + time);
     }
     else {
         console.log('Open indefinitely command received at ' + new Date());
-        let msg = tessel.post('open0');
-        console.log('Tessel replies: ' + msg);
-        if (response) reply(response, msg);
-    }
-
-    if (SunTimes.isNight()){
-        bulbs.on('outside', 180, 'garage opened at night');
+        return await tessel.post('open0');
     }
 }
 
@@ -132,7 +127,7 @@ function verifyAuth(req){
 }
 
 async function handleRequest(request, response){
-    let req = request.method + ' ' + request.url;
+    let req = request.method + ' ' + request.url.replace(/\?.*$/, '');
     console.log(`Received call at ${format(new Date())}: ${req}`);
 
     try {
@@ -156,8 +151,10 @@ async function handleRequest(request, response){
             if (req.match(/[0-9]+/))
                 t = req.match(/[0-9]+/)[0];
 
-            if (SunTimes.isNight())
+            if (SunTimes.isNight()){
                 bulbs.on('outside', 180);
+                drivewayForced = true;
+            }
 
             console.log(`Tessel reports opened ${t} state at ${new Date()}`);
             return "opened alert received";
@@ -180,11 +177,11 @@ async function handleRequest(request, response){
         }
         if (req.match(/^POST \/open/)){ // call from user
             if (verifyAuth(request)){
-                doOpen(request.url, response);
-                return 200;
+                return await doOpen(request.url);
             }
             else {
-                console.log('401 on open at ' + new Date());
+                console.log('Unknown auth while attempting to open garage at ' + new Date() + ': ');
+                console.log(req.headers.Authorization);
                 return 401;
             }
         }
@@ -213,9 +210,32 @@ async function handleRequest(request, response){
             state.bulbs = await bulbs.getState();
             return state;
         }
-        if (req == 'POST /garage'){
-            let newState = await bulbs.toggle('garage', req);
-            return `Toggled garage to ${newState}.`;
+        if (req == 'POST /button'){ // Call from AWS Lambda
+            if (verifyAuth(request)){
+                if (!recentLambda){
+                    if (SunTimes.isNight()){
+                        console.log('IoT button pressed. It is night, so turning on bulbs.');
+                        bulbs.on('outside', 180);
+                        drivewayforced = true;
+                        recentLambda = true;
+                        setTimeout(() => recentLambda = false, 60000);
+                    }
+                    else {
+                        console.log('IoT button pressed. It is not night, so opening garage.');
+                        doOpen(request.url);
+                    }
+                }
+                else {
+                    console.log('IoT button pressed again, so turning on bulbs.');
+                    doOpen(request.url);
+                    recentLambda = false;
+                }
+
+                return 200;
+            }
+            else {
+                return 401;
+            }
         }
         if (req == 'POST /home' || req == 'GET /home'){ 
             console.log("Nest reports people coming home at " + new Date());
@@ -223,7 +243,7 @@ async function handleRequest(request, response){
                 if (error) console.log("Failed to save snapshot. " + error);
             });*/
 
-            reply(response, "Got it.");
+            return "Got it.";
         }
     
         let [u, meth, light] = req.match(/(POST|GET) \/light\/([a-z0-9]+)/);
@@ -234,6 +254,9 @@ async function handleRequest(request, response){
             if (meth == 'POST'){
                 if (light == 'lamp')
                     lampForced = true;
+
+                if (light == 'driveway' || light == 'outside')
+                    drivewayForced = true;
 
                 let res = await bulbs.toggle(light, req);
                 return `Toggled ${light} to ${res ? 'on' : 'off'}.`;
@@ -273,11 +296,11 @@ console.log('Sunset time is: ' + format(times.sunset));
 console.log('Lamp off time is: ' + format(times.lampOff));
 
 setInterval(async () => {
-   if (!drivewayOn){
+   if (!drivewayForced){
        let bulb = await bulbs.getBulb('driveway');
        if (bulb.state){
-           drivewayOn = true;
-           console.log(`I see the driveway on at ${format(new Date())}.`);
+           console.log(`I see the driveway on at ${format(new Date())}. Why??? Shutting it off.`);
+           bulbs.off('driveway');
        }
    }
 }, 60000);

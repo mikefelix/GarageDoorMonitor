@@ -56,7 +56,8 @@ module.exports = class Hue {
                 promises.push(this.toggle(bulbs[i], timeout));
             }
 
-            return await Q.all(promises);
+            let values = await Q.all(promises);
+            return values.reduce((a,b) => a || b); 
         }
         else {
             let ret = false;
@@ -64,6 +65,7 @@ module.exports = class Hue {
                 let bulb = bulbs[i];
                 let body = await this._req(get, bulb);
                 let on = body && /"on": ?true/.test(body);
+                console.log(`${bulb} was ${on}, so toggling.`);
                 this._req(put, `${bulb}/state`, JSON.stringify({on: !on}));
                 ret |= !on;
                 if (timeout)
@@ -80,7 +82,7 @@ module.exports = class Hue {
         if (typeof bulbs[0] == 'string'){
             let promises = [];
             for (let i = 0; i < bulbs.length; i++){
-                console.log(`As part of "on" for ${bulb}, turning on ${bulbs[i]}`);
+                //console.log(`As part of "on" for ${bulb}, turning on ${bulbs[i]}`);
                 promises.push(this.on(bulbs[i], timeout));
             }
 
@@ -104,7 +106,7 @@ module.exports = class Hue {
         if (typeof bulbs[0] == 'string'){
             let promises = [];
             for (let i = 0; i < bulbs.length; i++){
-                console.log(`As part of "off" for ${bulb}, turning off ${bulbs[i]}`);
+                //console.log(`As part of "off" for ${bulb}, turning off ${bulbs[i]}`);
                 promises.push(this.off(bulbs[i]));
             }
 
