@@ -2,48 +2,71 @@ var suncalc = require("suncalc");
 var moment = require('moment-timezone');
 var format = require('./format.js');
 
-function isNight(log){
-    let date = new Date();
-    let times = getSunTimes(log);
-    let sunrise = times.sunrise;
-    let sunset = times.sunset;
-
-    if (date.getTime() < sunrise || date.getTime() > sunset){
-        if (log) console.log('I conclude that it is night.');
-        return true;
-    }
-    else {
-        if (log) console.log('I conclude that it is day.');
-        return false;
-    }
-}
-
 function getSunTimes(){
-    var tz = 'America/Denver';
-    var date = moment();
-    var times = suncalc.getTimes(date, 40.7608, -111.891);
-    var sr = moment(Date.parse(times.sunrise));
+    let tz = 'America/Denver'; // Was I using this?
+    let date = moment();
+    let times = suncalc.getTimes(date, 40.7608, -111.891);
+    let sr = moment(Date.parse(times.sunrise));
     sr.date(date.date());
-    var sunrise = new Date(sr); 
-    var ss = moment(Date.parse(times.sunsetStart));
+    let sunrise = new Date(sr); 
+    let ss = moment(Date.parse(times.sunsetStart));
     ss.date(date.date());
-    var sunset = new Date(ss);
-    var lampOn = new Date(sunset.getTime() - (1000 * 60 * 30));
-    var elevenThirtyPm = date.startOf('day').add(23, 'hours').add(30, 'minutes').toDate();
-    //var sevenThirtyPm = date.startOf('day').add(20, 'hours').add(30, 'minutes').toDate();
+    let sunset = new Date(ss);
+    let now = new Date();
+    let fourAm = moment().startOf('day').add(4, 'hours');
 
-    var ret = {
-        retrieved: new Date(),
+    return {
+        current: now,
+        isNight: now.getTime() < sunrise || now.getTime() > sunset,
         sunrise: sunrise,
         sunset: sunset,
-        lampOn: lampOn,//sevenThirtyPm,
-        lampOff: elevenThirtyPm
+        dayReset: fourAm
     };
-
-    return ret;
 }
+
+const simpleTimeRegex = /^([0-9]+):([0-9]+)$/;
+const modifiedTimeRegex = /^([0-9]+):([0-9]+)([-+])([0-9]+)$/;
+const namedTimeRegex = /^([a-z0-9_]+)$/;
+const modifiedNamedTimeRegex = /^([a-z0-9_]+)([-+])([0-9]+)$/;
+
+function parse(date){
+    if (!date) return undefined;
+
+    let text, hour, min, op = '+', plus = 0;
+    if (simpleTimeRegex.test(date)){
+        [text, hour, min] = date.match(simpleTimeRegex);
+        return moment().startOf('day').add(hour, 'hours').add(min, 'minutes').toDate();
+    }
+    else if (modifiedTimeRegex.test(date)){
+        let op, plus;
+        [text, hour, min, op, plus] = date.match(modifiedTimeRegex);
+        return moment().startOf('day').add(hour, 'hours').add(min, 'minutes')
+            .add((op == '-' ? -1 : 1) * plus, 'minutes').toDate();
+    }
+    else if (namedTimeRegex.test(date)){
+        let sunTimes = getSunTimes();
+        let [d, name] = date.match(namedTimeRegex);
+        let time = sunTimes[name];
+        if (!time)
+            throw `Unknown named time "${name}"`;
+
+        return moment(time);
+    }
+    else if (modifiedNamedTimeRegex.test(date)){
+        let op, plus, name, sunTimes = getSunTimes();
+        [text, name, op, plus] = date.match(modifiedNamedTimeRegex);
+        time = sunTimes[name];
+        if (!time)
+            throw `Unknown named time "${name}"`;
+
+        return moment(time)
+            .add((op == '-' ? -1 : 1) * plus, 'minutes').toDate();
+    }
+
+    throw `Cannot parse date ${date}`;
+} 
 
 module.exports = {
     get: getSunTimes,
-    isNight: isNight
+    parse
 };

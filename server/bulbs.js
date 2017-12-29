@@ -1,5 +1,6 @@
 let Hue = require('./hue.js'),
     Wemo = require('./wemo.js'),
+    Etek = require('./etek.js'),
     format = require('./format.js');
 
 let doAfterSeconds = (after, doThis) => {
@@ -7,8 +8,9 @@ let doAfterSeconds = (after, doThis) => {
 }
 
 module.exports = class Bulbs {
-    constructor(hueAddress){
+    constructor(hueAddress, etekCreds){
         this.wemoBulbs = ['lamp', 'aquarium'];
+        this.etekBulbs = ['coffee', 'wine'];
         this.hueBulbs = {
             garage: [1],
             breezeway: [2],
@@ -18,6 +20,7 @@ module.exports = class Bulbs {
 
         this.hue = new Hue(hueAddress, this.hueBulbs);
         this.wemo = new Wemo(this.wemoBulbs);
+        this.etek = new Etek(etekCreds[0], etekCreds[1]);
         this.history = {};
 
         for (let bulb in this.hueBulbs){
@@ -38,6 +41,9 @@ module.exports = class Bulbs {
             else if (this._isWemo(name)){
                 state = await this.wemo.getBulbState(name);
             }
+            else if (this._isEtek(name)){
+                state = await this.etek.getBulbState(name);
+            }
 
             return {
                 state: state,
@@ -57,7 +63,9 @@ module.exports = class Bulbs {
     async getState(){
         let hueState = await this.hue.getState();
         let wemoState = await this.wemo.getState();
+        let etekState = await this.etek.getState();
         let state = Object.assign(wemoState, hueState);
+        state = Object.assign(state, etekState);
         state.history = this.history;
         return state;
     }
@@ -68,6 +76,10 @@ module.exports = class Bulbs {
 
     _isWemo(name){
         return this.wemoBulbs.indexOf(name.toLowerCase()) >= 0;
+    }
+
+    _isEtek(name){
+        return this.etekBulbs.indexOf(name.toLowerCase()) >= 0;
     }
 
     _getSource(args){
@@ -110,6 +122,8 @@ module.exports = class Bulbs {
             handler = this.hue;
         else if (this._isWemo(bulbName))
             handler = this.wemo;
+        else if (this._isEtek(bulbName))
+            handler = this.etek;
         else 
             throw 'Unknown bulb ' + bulbName;
 

@@ -1,0 +1,26 @@
+{
+"coffee": {
+    "on": "7:30",
+    "off": "23:00"
+},
+
+"wine": {
+    "on": "sunset+30",
+    "off": "23:00"
+},
+
+"outside": {
+    "off": "sunrise"
+},
+
+"lamp": {
+    "on": "sunset-30",
+    "off": "23:30"
+},
+
+"aquarium": {
+    "on": "sunrise",
+    "off": "22:00"
+}
+}
+
