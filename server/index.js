@@ -7,77 +7,38 @@ let http = require("http"),
     moment = require("moment-timezone"),
     exec = require('child_process').exec,
     mail = require('./mail.js').send,
+    Scheduler = require('./scheduler.js'),
     Bulbs = require('./bulbs.js'),
     Tessel = require('./tessel.js'),
     Times = require('./sun_times.js');
 
-if (!process.argv[10]){
-    console.log("Usage:\nnode garage.js PORT EMAIL TESSEL_URL AUTH_KEY HUE_KEY PUSHOVER_KEY GARAGE_BUTTON_MAC ETEK_USER ETEK_PASS");
+if (!process.argv[11]){
+    console.log("Usage:\nnode garage.js PORT EMAIL TESSEL_URL AUTH_KEY HUE_IP HUE_KEY PUSHOVER_KEY GARAGE_BUTTON_MAC ETEK_USER ETEK_PASS");
     throw "Invalid usage";
 }
 
+//let lampForced = false, outerLightsForced = false, drivewayForced = false;
+let recentLambda = false;
 const port = process.argv[2]; 
 const emailAddress = process.argv[3];
 const tessel = new Tessel(process.argv[4]);
 const authKey = process.argv[5];
-const hueKey = process.argv[6];
-// const pushoverKey = process.argv[7];
-const garageButtonMac = process.argv[8];
-const etekUser = process.argv[9];
-const etekPass  = process.argv[10];
-const hueAddress = `http://192.168.0.115/api/${hueKey}/lights`;
+const hueIp = process.argv[6];
+const hueKey = process.argv[7];
+// const pushoverKey = process.argv[8];
+const garageButtonMac = process.argv[9];
+const etekUser = process.argv[10];
+const etekPass  = process.argv[11];
+const hueAddress = `http://${hueIp}/api/${hueKey}/lights`;
 const bulbs = new Bulbs(hueAddress, [etekUser, etekPass]);
 const currentWeatherUri = 'http://mozzarelly.com/weather/current';
-const schedules = JSON.parse(fs.readFileSync('./schedules.json'));
-//let lampForced = false, outerLightsForced = false, drivewayForced = false;
-let recentLambda = false;
 
-function checkSchedules(){
-    let date = new Date();
-    for (let sched in schedules){
-        console.log('Check schedule ' + sched);
-        checkSchedule(date, schedules[sched]);
-    }
-}
-
-async function checkSchedule(date, schedule){
-    let time = date.getTime();
-    let times = Times.get();
-    let bulb = schedule.bulb;
-    let on = Times.parse(schedule.on);
-    let off = Times.parse(schedule.off);
-    let overridden = !!schedule.overridden;
-    console.log(`on: ${on}, off: ${off}`);
-
-    function currentTimeIs(t) {
-        if (t.getTime) t = t.getTime();
-        return time > t && time < t + 60000;
-    };
-
-    if (overridden) {
-        if (currentTimeIs(times.dayReset)){
-            console.log(`Resetting overriden control for ${bulb}.`);
-            schedule.overridden = overridden = false;
-        }
-    }
-
-    if (!overridden && on){
-        if (currentTimeIs(on)){
-            if (!(await bulbs.getBulbState(bulb))){
-                console.log(`Turning on ${bulb} at ${on}`);
-                bulbs.on(bulb, 'schedule');
-            }
-        }
-    }
-    else if (!overridden && off){
-        if (currentTimeIs(off)){
-            if (await bulbs.getBulbState(bulb)){
-                console.log(`Turning off ${bulb} at ${off}`);
-                bulbs.off(bulb, 'schedule');
-            }
-        }
-    }
-}
+const scheduler = new Scheduler(
+    './schedules.json',
+    bulbs.getBulb.bind(bulbs),
+    bulbs.on.bind(bulbs),
+    bulbs.off.bind(bulbs)
+);
 
 function reply(res, msg){
     let headers = {
@@ -85,7 +46,13 @@ function reply(res, msg){
         'Access-Control-Allow-Origin': '*'
     };
 
-    if (typeof msg == 'number'){
+    if (msg === true){
+        res.writeHead(200, headers);
+    }
+    else if (msg === false){
+        res.writeHead(500, headers);
+    }
+    else if (typeof msg == 'number'){
         res.writeHead(msg, headers);
     }
     else if (typeof msg == 'object'){
@@ -101,8 +68,8 @@ function reply(res, msg){
 }
 
 async function doOpen(uri){
-    if (Times.get.isNight){
-        bulbs.on('outside', 180, 'garage opened at night');
+    if (Times.get().isNight){
+        bulbs.on('outside', 180, 'garage opened at night via app');
         //drivewayForced = true;
     }
     
@@ -160,8 +127,8 @@ async function handleRequest(request, response){
             if (req.match(/[0-9]+/))
                 t = req.match(/[0-9]+/)[0];
 
-            if (Times.get.isNight){
-                bulbs.on('outside', 180);
+            if (Times.get().isNight){
+                bulbs.on('outside', 180, 'garage opened at night');
                 //drivewayForced = true;
             }
 
@@ -195,48 +162,52 @@ async function handleRequest(request, response){
             }
         }
         if (req == 'GET /time'){ // call from user
-            return Times.get();
+            let times = Times.get();
+            for (let t in times){
+                if (t != 'isNight') times[t] = format(times[t], true);
+            }
+
+            return times;
         }
         if (req == 'GET /state'){ // call from user
             let tesselState = await tessel.get('state');
-            let state;
             try {
-                state = JSON.parse(tesselState);
+                tesselState = JSON.parse(tesselState);
             }
             catch (e) {
                 throw 'Error parsing Tessel state JSON: ' + tesselState;
             }
 
-            state.is_night = Times.get.isNight;
+            let state = {};
+            state.garage = tesselState;
+            state.times = Times.get();
             state.bulbs = await bulbs.getState();
             return state;
         }
         if (req == 'POST /button'){ // Call from AWS Lambda
-            if (verifyAuth(request)){
-                if (!recentLambda){
-                    if (Times.get.isNight){
-                        console.log('IoT button pressed. It is night, so turning on bulbs.');
-                        bulbs.on('outside', 180);
-                        //drivewayforced = true;
-                        recentLambda = true;
-                        setTimeout(() => recentLambda = false, 60000);
-                    }
-                    else {
-                        console.log('IoT button pressed. It is not night, so opening garage.');
-                        doOpen(request.url);
-                    }
+            if (!verifyAuth(request))
+                return 401;
+
+            if (!recentLambda){
+                if (Times.get().isNight){
+                    console.log('IoT button pressed. It is night, so turning on bulbs.');
+                    bulbs.on('outside', 180, 'IoT button');
+                    //drivewayforced = true;
+                    recentLambda = true;
+                    setTimeout(() => recentLambda = false, 60000);
                 }
                 else {
-                    console.log('IoT button pressed again, so turning on bulbs.');
+                    console.log('IoT button pressed. It is not night, so opening garage.');
                     doOpen(request.url);
-                    recentLambda = false;
                 }
-
-                return 200;
             }
             else {
-                return 401;
+                console.log('IoT button pressed again, so turning on bulbs.');
+                doOpen(request.url);
+                recentLambda = false;
             }
+
+            return 200;
         }
         if (req == 'POST /home' || req == 'GET /home'){ 
             console.log("Nest reports people coming home at " + new Date());
@@ -246,18 +217,21 @@ async function handleRequest(request, response){
 
             return "Got it.";
         }
-    
         if (/(POST|GET) \/light\/[a-z0-9]+/.test(req)){
             let [u, meth, light] = req.match(/(POST|GET) \/light\/([a-z0-9]+)/);
             if (meth == 'GET')
                 return await bulbs.getBulb(light);
             
             if (meth == 'POST'){
-                if (schedules[light])
-                    schedules[light].overridden = true;
+                scheduler.override(light);
 
                 let res = await bulbs.toggle(light, req);
-                return `Toggled ${light} to ${res ? 'on' : 'off'}.`;
+                if (res){
+                    return await bulbs.getBulb(light);
+                }
+                else {
+                    return 500;
+                }
             }
 
             return 406;
@@ -283,20 +257,18 @@ http.createServer((request, response) => {
     });
 }).listen(8888);
 
-setInterval(checkSchedules, 60000);
-
 let times = Times.get();
 console.log("Process started. Times for today:");
-console.log('Current time is: ' + format(times.retrieved));
+console.log('Current time is: ' + format(times.current));
 console.log('Sunrise time is: ' + format(times.sunrise));
 console.log('Sunset time is: ' + format(times.sunset));
 
-/*setInterval(async () => {
-   if (!drivewayForced){
+setInterval(async () => {
+   //if (!drivewayForced){
        let bulb = await bulbs.getBulb('driveway');
        if (bulb.state){
            console.log(`I see the driveway on at ${format(new Date())}. Why??? Shutting it off.`);
            bulbs.off('driveway');
        }
-   }
-}, 60000);*/
+   //}
+}, 60000);

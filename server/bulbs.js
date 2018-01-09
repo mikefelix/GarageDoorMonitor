@@ -15,13 +15,18 @@ module.exports = class Bulbs {
             garage: [1],
             breezeway: [2],
             driveway: [3,4],
-            outside: ['garage','breezeway','driveway']
+            //outside: ['garage','breezeway','driveway']
+            outside: ['garage','breezeway']
         };
 
         this.hue = new Hue(hueAddress, this.hueBulbs);
         this.wemo = new Wemo(this.wemoBulbs);
         this.etek = new Etek(etekCreds[0], etekCreds[1]);
         this.history = {};
+
+        for (let bulb of this.etekBulbs){
+            this.history[bulb] = {};
+        }
 
         for (let bulb in this.hueBulbs){
             this.history[bulb] = {};
@@ -34,16 +39,8 @@ module.exports = class Bulbs {
 
     async getBulb(name){
         try {
-            let state;
-            if (this._isHue(name)){
-                state = await this.hue.getBulbState(name);
-            }
-            else if (this._isWemo(name)){
-                state = await this.wemo.getBulbState(name);
-            }
-            else if (this._isEtek(name)){
-                state = await this.etek.getBulbState(name);
-            }
+            let handler = this._getHandler(name);
+            let state = await handler.getBulbState(name);
 
             return {
                 state: state,
@@ -56,9 +53,20 @@ module.exports = class Bulbs {
         }
     }
 
-    on(bulbName){ return this._handle(bulbName, 'on', this._getSource(arguments), this._getDelay(arguments)); }
-    off(bulbName){ return this._handle(bulbName, 'off', this._getSource(arguments), this._getDelay(arguments)); }
-    toggle(bulbName){ return this._handle(bulbName, 'toggle', this._getSource(arguments), this._getDelay(arguments)); }
+    async on(bulbName){ 
+        await this._handle(bulbName, 'on', this._getSource(arguments), this._getDelay(arguments)); 
+        return await this.getBulb(bulbName);
+    }
+
+    async off(bulbName){ 
+        await this._handle(bulbName, 'off', this._getSource(arguments), this._getDelay(arguments)); 
+        return await this.getBulb(bulbName);
+    }
+
+    async toggle(bulbName){ 
+        await this._handle(bulbName, 'toggle', this._getSource(arguments), this._getDelay(arguments)); 
+        return await this.getBulb(bulbName);
+    }
 
     async getState(){
         let hueState = await this.hue.getState();
@@ -68,6 +76,17 @@ module.exports = class Bulbs {
         state = Object.assign(state, etekState);
         state.history = this.history;
         return state;
+    }
+
+    _getHandler(name) {
+        if (this.hueBulbs.hasOwnProperty(name.toLowerCase()))
+            return this.hue;
+        else if (this.wemoBulbs.indexOf(name.toLowerCase()) >= 0)
+            return this.wemo;
+        else if (this.etekBulbs.indexOf(name.toLowerCase()) >= 0)
+            return this.etek;
+        else 
+            throw 'Unknown bulb ' + name;
     }
 
     _isHue(name){
@@ -116,7 +135,7 @@ module.exports = class Bulbs {
         }
     }
 
-    _handle(bulbName, action, source, delay){
+    async _handle(bulbName, action, source, delay){
         let handler;
         if (this._isHue(bulbName))
             handler = this.hue;
@@ -144,7 +163,9 @@ module.exports = class Bulbs {
             });
         }
 
-        let res = act.call(handler, bulbName);
+        let res = await act.call(handler, bulbName);
+        console.log(`In a call to ${action} for ${bulbName}, got result ${res}.`);
+
         if (action == 'toggle')
             action = action + (res ? ' on' : ' off');
 

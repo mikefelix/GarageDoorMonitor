@@ -1,4 +1,5 @@
 let {get, put} = require('request'),
+    format = require('./format.js'),
     Q = require('q');
 
 module.exports = class Hue {
@@ -47,79 +48,84 @@ module.exports = class Hue {
     }
 
     async toggle(bulb, timeout) {
-        console.log(`Toggle ${bulb} at ${new Date()}`);
+        console.log(`Toggle ${bulb} at ${format(new Date())}`);
         let bulbs = this._getBulbNumbers(bulb);
+        let promises = [];
         if (typeof bulbs[0] == 'string'){
-            let promises = [];
             for (let i = 0; i < bulbs.length; i++){
                 console.log(`As part of "toggle" for ${bulb}, toggling ${bulbs[i]}`);
                 promises.push(this.toggle(bulbs[i], timeout));
             }
-
-            let values = await Q.all(promises);
-            return values.reduce((a,b) => a || b); 
         }
         else {
-            let ret = false;
             for (let i = 0; i < bulbs.length; i++){
                 let bulb = bulbs[i];
                 let body = await this._req(get, bulb);
-                let on = body && /"on": ?true/.test(body);
-                console.log(`${bulb} was ${on}, so toggling.`);
-                this._req(put, `${bulb}/state`, JSON.stringify({on: !on}));
-                ret |= !on;
+                let on = !!body && /"on": ?true/.test(body);
+                console.log(`Bulb ${bulb} was ${on}, so toggling.`);
+                promises.push(this._req(put, `${bulb}/state`, JSON.stringify({on: !on}))
+                    .then(res => /"success"/.test(res))
+                );
+
                 if (timeout)
                     setTimeout(() => this.toggle(bulb), timeout);
             }
-
-            return ret;
         }
+
+        let values = await Q.all(promises);
+        return values.reduce((a,b) => a || b); 
     }
 
     async on(bulb, timeout) {
-        console.log(`Turn on ${bulb} at ${new Date()}`);
+        console.log(`Turn on ${bulb} at ${format(new Date())}`);
         let bulbs = this._getBulbNumbers(bulb);
+        let promises = [];
+
         if (typeof bulbs[0] == 'string'){
-            let promises = [];
             for (let i = 0; i < bulbs.length; i++){
                 //console.log(`As part of "on" for ${bulb}, turning on ${bulbs[i]}`);
                 promises.push(this.on(bulbs[i], timeout));
             }
-
-            return await Q.all(promises);
         }
         else {
             for (let i = 0; i < bulbs.length; i++){
                 let bulb = bulbs[i];
-                this._req(put, `${bulb}/state`, JSON.stringify({on:true}));
+                promises.push(this._req(put, `${bulb}/state`, JSON.stringify({on:true}))
+                    .then(res => /"success"/.test(res))
+                ); 
+
                 if (timeout)
                     setTimeout(() => this.toggle(bulb), timeout);
             }
-
-            return true;
         }
+
+        let values = await Q.all(promises);
+        return values.reduce((a,b) => a || b);
     }
 
     async off(bulb) {
-        console.log(`Turn off ${bulb} at ${new Date()}`);
+        console.log(`Turn off ${bulb} at ${format(new Date())}`);
         let bulbs = this._getBulbNumbers(bulb);
+        let promises = [];
+
         if (typeof bulbs[0] == 'string'){
-            let promises = [];
             for (let i = 0; i < bulbs.length; i++){
                 //console.log(`As part of "off" for ${bulb}, turning off ${bulbs[i]}`);
                 promises.push(this.off(bulbs[i]));
             }
 
-            return await Q.all(promises);
         }
         else {
             for (let i = 0; i < bulbs.length; i++){
                 let bulb = bulbs[i];
-                this._req(put, `${bulb}/state`, JSON.stringify({on:false}));
+                promises.push(this._req(put, `${bulb}/state`, JSON.stringify({on:false}))
+                    .then(res => /"success"/.test(res))
+                );
             }
-
-            return false;
         }
+
+        let values = await Q.all(promises);
+        return values.reduce((a,b) => a || b);
     }
 
     _getBulbNumbers(bulb){

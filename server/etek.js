@@ -27,25 +27,25 @@ module.exports = class Etek {
     async toggle(name, timeout) {
         let device = await this._getDevice(name);
         if (device.status === 'open') {
-            console.log(`toggling device ${device.name} off`);
-            return this.client.turnOff(device.id);
+            console.log(`Toggling device ${device.name} off.`);
+            return this.client.turnOff(device.id).then(state => state.relay != 'open');
         }
         else {
-            console.log(`toggling device ${device.name} on`);
-            return this.client.turnOn(device.id);
+            console.log(`Toggling device ${device.name} on.`);
+            return this.client.turnOn(device.id).then(state => state.relay == 'open');
         }
     }
 
     async on(name, timeout) {
         let device = await this._getDevice(name);
         console.log(`turning device ${device.name} on`);
-        this.client.turnOn(device.id);
+        return this.client.turnOn(device.id).then(state => state.relay == 'open');;
     }
 
     async off(name) {
         let device = await this._getDevice(name);
         console.log(`turning device ${device.name} off`);
-        this.client.turnOff(device.id);
+        return this.client.turnOff(device.id).then(state => state.relay != 'open');;
     }
 
     _getDevices() {

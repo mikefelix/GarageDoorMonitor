@@ -58,7 +58,7 @@ module.exports = class Wemo {
             }
             else {
                 console.log('Retrying changeState:', name);
-                this._changeState(name, newState, true);
+                return await this._changeState(name, newState, true);
             }
         }
     }
@@ -119,16 +119,16 @@ module.exports = class Wemo {
                     else if (newState === undefined){
                         //console.log("Toggling wemo state from " + state + ".");
                         client.setBinaryState(state ? 0 : 1);
-                        resolve(!!!state);
+                        resolve(true);
                     }
                     else if (state != !!newState){
                         //console.log("Setting wemo to state " + newState + ".");
                         client.setBinaryState(newState ? 1 : 0);
-                        resolve(!!newState);
+                        resolve(true);
                     }
                     else {
                         //console.log("Wemo was already in state " + state + ".");
-                        resolve(!!state);
+                        resolve(false);
                     }
                 });
             }

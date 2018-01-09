@@ -4,22 +4,22 @@ var format = require('./format.js');
 
 function getSunTimes(){
     let tz = 'America/Denver'; // Was I using this?
-    let date = moment();
-    let times = suncalc.getTimes(date, 40.7608, -111.891);
+    let now = moment();
+    let times = suncalc.getTimes(now, 40.7608, -111.891);
     let sr = moment(Date.parse(times.sunrise));
-    sr.date(date.date());
+    sr.date(now.date());
     let sunrise = new Date(sr); 
     let ss = moment(Date.parse(times.sunsetStart));
-    ss.date(date.date());
+    ss.date(now.date());
     let sunset = new Date(ss);
-    let now = new Date();
-    let fourAm = moment().startOf('day').add(4, 'hours');
+    let fourAm = moment().startOf('day').add(4, 'hours').toDate();
+    now = now.toDate();
 
     return {
         current: now,
         isNight: now.getTime() < sunrise || now.getTime() > sunset,
-        sunrise: sunrise,
-        sunset: sunset,
+        sunrise,
+        sunset,
         dayReset: fourAm
     };
 }
@@ -32,35 +32,40 @@ const modifiedNamedTimeRegex = /^([a-z0-9_]+)([-+])([0-9]+)$/;
 function parse(date){
     if (!date) return undefined;
 
-    let text, hour, min, op = '+', plus = 0;
-    if (simpleTimeRegex.test(date)){
-        [text, hour, min] = date.match(simpleTimeRegex);
-        return moment().startOf('day').add(hour, 'hours').add(min, 'minutes').toDate();
-    }
-    else if (modifiedTimeRegex.test(date)){
-        let op, plus;
-        [text, hour, min, op, plus] = date.match(modifiedTimeRegex);
-        return moment().startOf('day').add(hour, 'hours').add(min, 'minutes')
-            .add((op == '-' ? -1 : 1) * plus, 'minutes').toDate();
-    }
-    else if (namedTimeRegex.test(date)){
-        let sunTimes = getSunTimes();
-        let [d, name] = date.match(namedTimeRegex);
-        let time = sunTimes[name];
-        if (!time)
-            throw `Unknown named time "${name}"`;
+    try {
+        let text, hour, min, op = '+', plus = 0;
+        if (simpleTimeRegex.test(date)){
+            [text, hour, min] = date.match(simpleTimeRegex);
+            return moment().startOf('day').add(hour, 'hours').add(min, 'minutes').toDate();
+        }
+        else if (modifiedTimeRegex.test(date)){
+            let op, plus;
+            [text, hour, min, op, plus] = date.match(modifiedTimeRegex);
+            return moment().startOf('day').add(hour, 'hours').add(min, 'minutes')
+                .add((op == '-' ? -1 : 1) * plus, 'minutes').toDate();
+        }
+        else if (namedTimeRegex.test(date)){
+            let sunTimes = getSunTimes();
+            let [d, name] = date.match(namedTimeRegex);
+            let time = sunTimes[name];
+            if (!time)
+                throw `Unknown named time "${name}"`;
 
-        return moment(time);
-    }
-    else if (modifiedNamedTimeRegex.test(date)){
-        let op, plus, name, sunTimes = getSunTimes();
-        [text, name, op, plus] = date.match(modifiedNamedTimeRegex);
-        time = sunTimes[name];
-        if (!time)
-            throw `Unknown named time "${name}"`;
+            return moment(time).toDate();
+        }
+        else if (modifiedNamedTimeRegex.test(date)){
+            let op, plus, name, sunTimes = getSunTimes();
+            [text, name, op, plus] = date.match(modifiedNamedTimeRegex);
+            time = sunTimes[name];
+            if (!time)
+                throw `Unknown named time "${name}"`;
 
-        return moment(time)
-            .add((op == '-' ? -1 : 1) * plus, 'minutes').toDate();
+            return moment(time)
+                .add((op == '-' ? -1 : 1) * plus, 'minutes').toDate();
+        }
+    }
+    catch (e){
+        throw `Cannot parse date ${date}: ${e}`;
     }
 
     throw `Cannot parse date ${date}`;
