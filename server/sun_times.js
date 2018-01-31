@@ -2,7 +2,7 @@ var suncalc = require("suncalc");
 var moment = require('moment-timezone');
 var format = require('./format.js');
 
-function getSunTimes(){
+function getSunTimes(formatted){
     let tz = 'America/Denver'; // Was I using this?
     let now = moment();
     let times = suncalc.getTimes(now, 40.7608, -111.891);
@@ -16,11 +16,11 @@ function getSunTimes(){
     now = now.toDate();
 
     return {
-        current: now,
+        current: formatted ? format(now, true) : now,
         isNight: now.getTime() < sunrise || now.getTime() > sunset,
-        sunrise,
-        sunset,
-        dayReset: fourAm
+        sunrise: formatted ? format(sunrise, true) : sunrise,
+        sunset: formatted ? format(sunset, true) : sunset,
+        dayReset: formatted ? format(fourAm, true) : fourAm
     };
 }
 

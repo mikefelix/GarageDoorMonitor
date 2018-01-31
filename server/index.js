@@ -17,7 +17,6 @@ if (!process.argv[11]){
     throw "Invalid usage";
 }
 
-//let lampForced = false, outerLightsForced = false, drivewayForced = false;
 let recentLambda = false;
 const port = process.argv[2]; 
 const emailAddress = process.argv[3];
@@ -70,7 +69,6 @@ function reply(res, msg){
 async function doOpen(uri){
     if (Times.get().isNight){
         bulbs.on('outside', 180, 'garage opened at night via app');
-        //drivewayForced = true;
     }
     
     if (/open[0-9]+/.test(uri)){
@@ -129,7 +127,6 @@ async function handleRequest(request, response){
 
             if (Times.get().isNight){
                 bulbs.on('outside', 180, 'garage opened at night');
-                //drivewayForced = true;
             }
 
             console.log(`Tessel reports opened ${t} state at ${new Date()}`);
@@ -162,7 +159,7 @@ async function handleRequest(request, response){
             }
         }
         if (req == 'GET /time'){ // call from user
-            let times = Times.get();
+            let times = Times.get(true);
             for (let t in times){
                 if (t != 'isNight') times[t] = format(times[t], true);
             }
@@ -170,9 +167,17 @@ async function handleRequest(request, response){
             return times;
         }
         if (req == 'GET /state'){ // call from user
+            let formatTesselDate = (date) => {
+                return date ? moment(date).format("MM/DD/YYYY, h:mm:ssa") : null;
+            };
+
             let tesselState = await tessel.get('state');
             try {
                 tesselState = JSON.parse(tesselState);
+                tesselState.last_open_time = formatTesselDate(tesselState.last_open_time);
+                tesselState.last_close_time = formatTesselDate(tesselState.last_close_time);
+                tesselState.next_close_time = formatTesselDate(tesselState.next_close_time);
+                tesselState.current_time = formatTesselDate(tesselState.current_time);
             }
             catch (e) {
                 throw 'Error parsing Tessel state JSON: ' + tesselState;
@@ -180,7 +185,7 @@ async function handleRequest(request, response){
 
             let state = {};
             state.garage = tesselState;
-            state.times = Times.get();
+            state.times = Times.get(true);
             state.bulbs = await bulbs.getState();
             return state;
         }
@@ -192,7 +197,6 @@ async function handleRequest(request, response){
                 if (Times.get().isNight){
                     console.log('IoT button pressed. It is night, so turning on bulbs.');
                     bulbs.on('outside', 180, 'IoT button');
-                    //drivewayforced = true;
                     recentLambda = true;
                     setTimeout(() => recentLambda = false, 60000);
                 }
@@ -257,18 +261,16 @@ http.createServer((request, response) => {
     });
 }).listen(8888);
 
-let times = Times.get();
+let times = Times.get(true);
 console.log("Process started. Times for today:");
-console.log('Current time is: ' + format(times.current));
-console.log('Sunrise time is: ' + format(times.sunrise));
-console.log('Sunset time is: ' + format(times.sunset));
+console.log('Current time is: ' + times.current);
+console.log('Sunrise time is: ' + times.sunrise);
+console.log('Sunset time is: ' + times.sunset);
 
 setInterval(async () => {
-   //if (!drivewayForced){
-       let bulb = await bulbs.getBulb('driveway');
-       if (bulb.state){
-           console.log(`I see the driveway on at ${format(new Date())}. Why??? Shutting it off.`);
-           bulbs.off('driveway');
-       }
-   //}
+   let bulb = await bulbs.getBulb('driveway');
+   if (bulb.state){
+       console.log(`I see the driveway on at ${format(new Date())}. Why??? Shutting it off.`);
+       bulbs.off('driveway');
+   }
 }, 60000);

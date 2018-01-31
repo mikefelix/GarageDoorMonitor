@@ -5,9 +5,11 @@ module.exports = class Wemo {
     constructor(bulbs){
         this.clients = {};
         this.bulbs = bulbs;
-        /*wemo.discover(info => {
+        wemo.discover(info => {
             console.log('on startup, discovered', info.friendlyName);
-        });*/
+            let client = wemo.client(info);
+            this.clients[info.friendlyName] = client;
+        });
     }
 
     async getState(){
@@ -48,8 +50,10 @@ module.exports = class Wemo {
     }
     
     async _changeState(name, newState, retrying){
+        console.log(`Wemo: change ${name} to ${newState} (${retrying})`);
         try {
             let client = await this._getClient(name);
+            //console.log('Client found for ' + name + ': '); console.dir(client);
             return await this._setClientState(client, newState);
         }
         catch (err) {
@@ -64,10 +68,12 @@ module.exports = class Wemo {
     }
 
     _getClient(name, forceDiscover){
+        console.log(`wemo: get client for ${name}`);
         return new Promise((resolve, reject) => {
             name = name.substring(0, 1).toUpperCase() + name.substring(1);
-            if (forceDiscover)
-                delete this.clients[name];
+            //forceDiscover = true; // TODO: needed?
+            //if (forceDiscover)
+                //delete this.clients[name];
 
             let client = this.clients[name];
             if (client) {
@@ -76,12 +82,17 @@ module.exports = class Wemo {
             else {
                 wemo.discover(deviceInfo => {
                     try {
-                        //console.log('discovered', deviceInfo.friendlyName);
-                        if (deviceInfo && deviceInfo.friendlyName == name){
-                            this.clients[name] = wemo.client(deviceInfo);
-                            resolve(this.clients[name]);
+                        if (deviceInfo){
+                            console.log(`Wemo device ${deviceInfo.friendlyName} is at ${deviceInfo.host}:${deviceInfo.port}`);
+
+                            if (deviceInfo.friendlyName == name){
+                                this.clients[name] = wemo.client(deviceInfo);
+                                resolve(this.clients[name]);
+                            }
                         }
-                    } 
+                        else 
+                            console.log('No device info?');
+                    }
                     catch (e){
                         console.log("Can't discover devices: " + e);
                         reject(e);

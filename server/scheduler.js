@@ -55,22 +55,18 @@ module.exports = class Scheduler {
                 console.log(`It's ${format(date)} and time to trigger "on" action for schedule "${name}".`);
                 let bulb = await this.getBulb(name);//this.bulbs.getBulb(name);
                 if (!bulb.state){
-                    console.log(`Turning on ${name} at ${format(on)}`);
-                    let res = await this.turnOn(name, 'schedule');
-                    console.log(`Response was ${res}.`);
-                    if (typeof res == 'object') console.dir(res);
-                }
+                    console.log('Turn on ' + name);
+                    await this.turnOn(name, 'schedule');
+                } else console.log('Bulb ' + name + ' was already on.');
             }
 
             if (off && currentTimeIs(off)){
                 console.log(`It's ${format(date)} and time to trigger "off" action for schedule "${name}".`);
                 let bulb = await this.getBulb(name);//this.bulbs.getBulb(name);
                 if (bulb.state){
-                    console.log(`Turning off ${name} at ${format(off)}`);
-                    let res = await this.turnOff(name, 'schedule');
-                    console.log(`Response was ${res}.`);
-                    if (typeof res == 'object') console.dir(res);
-                }
+                    console.log('Turn off ' + name);
+                    await this.turnOff(name, 'schedule');
+                } else console.log('Bulb ' + name + ' was already off.');
             }
         }
     }
