@@ -32,6 +32,11 @@ const modifiedNamedTimeRegex = /^([a-z0-9_]+)([-+])([0-9]+)$/;
 function parse(date){
     if (!date) return undefined;
 
+    if (typeof date != 'string'){
+        console.log(`Cannot parse date of type ${typeof date}.`); console.dir(date);
+        return undefined;
+    } 
+
     try {
         let text, hour, min, op = '+', plus = 0;
         if (simpleTimeRegex.test(date)){

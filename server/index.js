@@ -187,6 +187,8 @@ async function handleRequest(request, response){
             state.garage = tesselState;
             state.times = Times.get(true);
             state.bulbs = await bulbs.getState();
+            state.schedules = scheduler.getSchedules();
+            console.dir(state.schedules);
             return state;
         }
         if (req == 'POST /button'){ // Call from AWS Lambda

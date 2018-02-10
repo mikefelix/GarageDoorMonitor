@@ -164,7 +164,7 @@ module.exports = class Bulbs {
         }
 
         let res = await act.call(handler, bulbName);
-        console.log(`In a call to ${action} for ${bulbName}, got result ${res}.`);
+        //console.log(`In a call to ${action} for ${bulbName}, got result ${res}.`);
 
         if (action == 'toggle')
             action = action + (res ? ' on' : ' off');

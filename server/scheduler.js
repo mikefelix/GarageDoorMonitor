@@ -71,21 +71,40 @@ module.exports = class Scheduler {
         }
     }
 
-    _readFile(){
-        this.schedules = JSON.parse(fs.readFileSync(this.file));
-        console.log('Scheduled times for today:');
+    getSchedules(){
+        let schedules = Object.assign({}, this.schedules);
         for (let sched in this.schedules) {
             let schedule = this.schedules[sched];
             let on = schedule.on;
             let off = schedule.off;
             let at = schedule.at;
-            console.log(`  ${sched}:`);
-            if (schedule.on)
-                console.log(`    on at ${format(Times.parse(on))}`);
-            if (schedule.off)
-                console.log(`    off at ${format(Times.parse(off))}`);
-            if (schedule.at)
-                console.log(`    at ${format(Times.parse(at))}`);
+            if (on) {
+                if (typeof on == 'object') {console.log('should not be object here');console.dir(on);}
+                schedule.on = {
+                    spec: on,
+                    date: format(Times.parse(on), true)
+                }
+            }
+
+            if (off) {
+                schedule.off = {
+                    spec: off,
+                    date: format(Times.parse(off), true)
+                }
+            }
+
+            if (at) {
+                schedule.at = {
+                    spec: at,
+                    date: format(Times.parse(at), true)
+                }
+            }
         }
+
+        return schedules;
+    }
+
+    _readFile(){
+        this.schedules = JSON.parse(fs.readFileSync(this.file));
     }
 }
