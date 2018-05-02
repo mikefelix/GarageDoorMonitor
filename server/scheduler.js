@@ -1,27 +1,61 @@
 let format = require('./format.js'),
     moment = require('moment-timezone'),
+    util = require('util'),
+    exec = util.promisify(require('child_process').exec);
     fs = require('fs'),
+    log = require('./log.js')('Scheduler'),
     Times = require('./sun_times.js');
 
 module.exports = class Scheduler {
     constructor(file, getBulb, turnOn, turnOff){
         this.file = file;
-        this.getBulb = getBulb;
-        this.turnOn = turnOn;
-        this.turnOff = turnOff;
+        this._getBulb = getBulb;
+        this._turnOn = turnOn;
+        this._turnOff = turnOff;
         this._readFile();
+        this.timers = {};
         setInterval(this.checkAll.bind(this), 60000);
     }
 
     override(schedule) {
-        if (this.schedules[schedule])
+        if (this.schedules[schedule] && !this.specifiesCountdown(this.schedules[schedule]))
             this.schedules[schedule].overridden = true;
     }
 
     async checkAll(){
-        let date = new Date();
+        if (this.currentTimeIs(this.reset)){
+            this._readFile();
+        }
+        
         for (let schedule in this.schedules){
             this.check(schedule);
+        }
+    }
+
+    setSpec(spec, trigger){
+        log(`Set ${spec} to ${trigger}`);
+        this.schedules[spec] = this.parseTrigger(trigger);
+    }
+
+    oldCurrentTimeIs(minute) {
+        let date = new Date();
+        let time = date.getTime();
+        let minuteStart = minute.getTime();
+        return time > minuteStart && time < minuteStart + 60000;
+    }
+
+    currentTimeIs(time){
+        let now = moment();
+        let nowMinute = now.minute();
+        let nowHour = now.hour();
+
+        if (time.match && time.match(/^[0-9]+:[0-9]+$/)){
+            let [a, h, m] = time.match(/([0-9]+):([0-9]+)/);
+            return nowMinute == m && nowHour == h;
+        }
+        else {
+            let then = moment(time);
+            return nowMinute == then.minute() && nowHour == then.hour();
         }
     }
 
@@ -29,63 +63,205 @@ module.exports = class Scheduler {
         if (!date) date = new Date();
         let schedule = this.schedules[name];
         if (!schedule) {
-            console.log(`Schedule ${schedule} not found.`);
+            log(`Schedule ${schedule} not found.`);
             return;
         }
 
-        let time = date.getTime();
-        let on = Times.parse(schedule.on);
-        let off = Times.parse(schedule.off);
-        let overridden = !!schedule.overridden;
+        if (!!schedule.overridden){
+            return;
+        }
 
-        function currentTimeIs(minute) {
-            let minuteStart = minute.getTime();
-            return time > minuteStart && time < minuteStart + 60000;
-        };
-
-        if (name == 'reset'){
-            if (currentTimeIs(Times.parse(schedule.at))){
-                console.log('Loading schedule...');
-                this._readFile();
+        let onActor = this.actors[name]['on'];
+        if (onActor){
+            let bulb = await this._getBulb(name);
+            if (!bulb.state){
+                //log(`Bulb ${name} is off so run its 'on' actor`);
+                onActor(bulb);
             }
         }
 
-        if (!overridden){
-            if (on && currentTimeIs(on)){
-                console.log(`It's ${format(date)} and time to trigger "on" action for schedule "${name}".`);
-                let bulb = await this.getBulb(name);//this.bulbs.getBulb(name);
-                if (!bulb.state){
-                    console.log('Turn on ' + name);
-                    await this.turnOn(name, 'schedule');
-                } else console.log('Bulb ' + name + ' was already on.');
-            }
-
-            if (off && currentTimeIs(off)){
-                console.log(`It's ${format(date)} and time to trigger "off" action for schedule "${name}".`);
-                let bulb = await this.getBulb(name);//this.bulbs.getBulb(name);
-                if (bulb.state){
-                    console.log('Turn off ' + name);
-                    await this.turnOff(name, 'schedule');
-                } else console.log('Bulb ' + name + ' was already off.');
+        let offActor = this.actors[name]['off'];
+        if (offActor){
+            let bulb = await this._getBulb(name);
+            if (bulb.state){
+                //log(`Bulb ${name} is on so run its 'off' actor`);
+                offActor(bulb);
             }
         }
     }
 
-    _readFile(){
-        this.schedules = JSON.parse(fs.readFileSync(this.file));
-        console.log('Scheduled times for today:');
+    getSchedules(){
+        let schedules = {};
         for (let sched in this.schedules) {
-            let schedule = this.schedules[sched];
-            let on = schedule.on;
-            let off = schedule.off;
-            let at = schedule.at;
-            console.log(`  ${sched}:`);
-            if (schedule.on)
-                console.log(`    on at ${format(Times.parse(on))}`);
-            if (schedule.off)
-                console.log(`    off at ${format(Times.parse(off))}`);
-            if (schedule.at)
-                console.log(`    at ${format(Times.parse(at))}`);
+            let spec = this.schedules[sched];
+            let schedule = schedules[sched] = {};
+
+            let on = spec.on;
+            if (on) {
+                schedule.on = {
+                    spec: on,
+                    date: format(Times.parse(on))
+                }
+            }
+
+            let off = spec.off;
+            if (off) {
+                schedule.off = {
+                    spec: off,
+                    date: format(Times.parse(off))
+                }
+            }
         }
+
+        return schedules;
+    }
+
+    specifiesCountdown(trigger){
+        return trigger && trigger.match && trigger.match(/^[0-9]+$/);
+    }
+
+    parseTrigger(schedule, spec, trigger){
+        let self = this;
+        //log(`Adding trigger "${trigger}" for ${spec} for ${schedule}.`);
+        if (this.specifiesCountdown(trigger)) {
+            let key = `${schedule}_${spec}`;
+            return async (bulb) => {
+                if (spec == 'off'){
+                    if (bulb.state){
+                        if (self.timers[key] === undefined){
+                            // Bulb is on but there's no timer; create it.
+                            log(`Create timer for ${trigger}.`);
+                            self.timers[key] = +trigger;
+                        }
+                        else if (self.timers[key] <= 0){
+                            // Bulb is on and timer has reached zero; turn it off.
+                            log(`Timer has reached zero. Time for shutoff!`);
+                            delete self.timers[key];
+                            return true;
+                        }
+                        else {
+                            // Bulb is on and there's a timer; decrement it.
+                            //log(`${self.timers[key]} minutes left until shutoff.`);
+                            self.timers[key] = self.timers[key] - 1;
+                        }
+                    }
+                    else {
+                        if (self.timers[key]){
+                            // Bulb is off and there's still a timer; clear it.
+                            delete self.timers[key];
+                        }
+                        else {
+                            // Bulb is off.
+                        }
+                    }
+                }
+
+                return false;
+            };
+        }
+
+        if (/^(.+)\|(.+)$/.test(trigger)){
+            let [m, first, second] = trigger.match(/^(.+)\|(.+)$/);
+            let trigger1 = this.parseTrigger(schedule, spec, first.trim());
+            let trigger2 = this.parseTrigger(schedule, spec, second.trim());
+            return async (bulb) => {
+                return (await trigger1(bulb)) || (await trigger2(bulb));
+            }
+        }
+
+        if (/^(.+)&(.+)$/.test(trigger)){
+            let [m, first, second] = trigger.match(/^(.+)&(.+)$/);
+            let trigger1 = this.parseTrigger(schedule, spec, first.trim());
+            let trigger2 = this.parseTrigger(schedule, spec, second.trim());
+            return async (bulb) => {
+                //log('test trigger ' + trigger);
+                return (await trigger1(bulb)) && (await trigger2(bulb));
+            }
+        }
+        
+        if (/^!/.test(trigger)){
+            let [m, func] = trigger.match(/^!(.+)$/);
+            let trigFunc = this.parseTrigger(schedule, spec, func.trim());
+            return async (bulb) => {
+                //log('test trigger ' + trigger);
+                return !(await trigFunc(bulb));
+            }
+        }
+
+        if (/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(trigger)){
+            return async (bulb) => {
+                let res = await self._hostIsUp(trigger);
+                //log('ping trigger gave ' + res);
+                return res;
+            }
+        }
+
+        let time = Times.parse(trigger);
+        if (time) {
+            log(`${schedule} will turn ${spec} today at ${format(time)}.`);
+            return async () => {
+                return self.currentTimeIs(time);
+            }
+        }
+
+        throw 'Unknown trigger format: ' + trigger;
+    }
+
+    _readFile(){
+        log(`Read file`);
+        let self = this;
+        function getActor(trigger, action, schedule, spec){
+            return async (bulb) => {
+                let res = await trigger(bulb);
+                if (res){ 
+                    log(`Turn ${schedule} ${spec}.`);
+                    action(schedule, `schedule (${spec])`);
+                    delete self.timers[schedule];
+                }
+            };
+        }
+
+        let file = JSON.parse(fs.readFileSync(this.file));
+        this.reset = Times.parse(file.reset);
+        this.schedules = file.schedules;
+        this.actors = {};
+        log('Schedule reset time is ' + format(this.reset));
+
+        for (let sched in this.schedules){
+            this.actors[sched] = {};
+            for (let spec in this.schedules[sched]){
+                //log('Consume trigger ' + sched + "/" + spec);
+                let trigger = this.parseTrigger(sched, spec, this.schedules[sched][spec]);
+                if (spec == 'off')
+                    this.actors[sched][spec] = getActor(trigger, this._turnOff, sched, spec);
+                else if (spec == 'on')
+                    this.actors[sched][spec] = getActor(trigger, this._turnOn, sched, spec);
+            }
+        }
+    }
+
+    async _hostIsUp(host) {
+        try {
+            const { stdout, stderr } = await exec('ping -w 1 ' + host); 
+
+            if (stderr) {
+                //log("Failed to ping. " + stderr);
+                return false;
+            }
+            else {
+                let [m, num] = stdout.match(/([0-9]+) received/);
+                if (num === undefined){
+                    log("Cannot find packets received in output:");
+                    log(stdout);
+                }
+
+                //log(num + ' packets received from ' + host);
+                return num > 0;
+            }
+        }
+        catch (e) {
+            //log('Ping failed. ' + e);
+            return false;
+        }    
     }
 }

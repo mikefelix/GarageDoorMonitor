@@ -1,6 +1,7 @@
 let Hue = require('./hue.js'),
     Wemo = require('./wemo.js'),
     Etek = require('./etek.js'),
+    log = require('./log.js')('Bulbs'),
     format = require('./format.js');
 
 let doAfterSeconds = (after, doThis) => {
@@ -10,7 +11,7 @@ let doAfterSeconds = (after, doThis) => {
 module.exports = class Bulbs {
     constructor(hueAddress, etekCreds){
         this.wemoBulbs = ['lamp', 'aquarium'];
-        this.etekBulbs = ['coffee', 'wine'];
+        this.etekBulbs = ['coffee', 'fan', 'wine', 'office', 'grow'];
         this.hueBulbs = {
             garage: [1],
             breezeway: [2],
@@ -40,6 +41,7 @@ module.exports = class Bulbs {
     async getBulb(name){
         try {
             let handler = this._getHandler(name);
+            //log(`Get bulb ${name}`);
             let state = await handler.getBulbState(name);
 
             return {
@@ -48,7 +50,7 @@ module.exports = class Bulbs {
             };
         }
         catch (e){
-            console.log("Couldn't get state for bulb", name, ":", e);
+            log(`Couldn't get state for bulb ${name}: ${e}`);
             return false;
         }
     }
@@ -123,7 +125,7 @@ module.exports = class Bulbs {
         if (!event) 
             event = record[action] = {};
 
-        event.date = format(new Date(), true);
+        event.date = format(new Date());
         event.source = source;
         
         if (this._isHue[bulbName]){
@@ -136,23 +138,16 @@ module.exports = class Bulbs {
     }
 
     async _handle(bulbName, action, source, delay){
-        let handler;
-        if (this._isHue(bulbName))
-            handler = this.hue;
-        else if (this._isWemo(bulbName))
-            handler = this.wemo;
-        else if (this._isEtek(bulbName))
-            handler = this.etek;
-        else 
-            throw 'Unknown bulb ' + bulbName;
+        let handler = this._getHandler(bulbName);
+        let currentState = await handler.getBulbState(bulbName);
+        let act, react, expectedState;
 
-        let act, react;
         if (action == 'on')
-            [act, react] = [handler.on, handler.off];
+            [act, react, expectedState] = [handler.on, handler.off, true];
         else if (action == 'off')
-            [act, react] = [handler.off, undefined];
+            [act, react, expectedState] = [handler.off, undefined, false];
         else if (action == 'toggle')
-            [act, react] = [handler.toggle, handler.toggle];
+            [act, react, expectedState] = [handler.toggle, handler.toggle, !currentState];
         else
             throw 'Unknown action ' + action;
 
@@ -163,14 +158,32 @@ module.exports = class Bulbs {
             });
         }
 
-        let res = await act.call(handler, bulbName);
-        console.log(`In a call to ${action} for ${bulbName}, got result ${res}.`);
+        if (expectedState != currentState){
+            let tried = 0;
+            do {
+                log(`Toggling ${bulbName} to ${expectedState} for ${source || 'unknown reason'}.`);
+                tried++;
+                await act.call(handler, bulbName);
+                log(`Made call. Checking result.`);
+                currentState = await handler.getBulbState(bulbName);
+                log(`New state is ${currentState}.`);
+            }
+            while (tried < 10 && expectedState != currentState);
+
+            if (tried > 1){
+                log(`Toggling ${bulbName} to ${expectedState} took ${tried} tries!`);
+            }
+
+            if (tried >= 10) {
+                log(`Could not change ${bulbName} to ${currentState} after ${tried} tries.`);
+            }
+        }
 
         if (action == 'toggle')
-            action = action + (res ? ' on' : ' off');
+            action = action + (currentState ? ' on' : ' off');
 
         this._record(bulbName, action, source || 'unknown');
-        return res;
+        return currentState;
     }
 
 }

@@ -1,29 +1,35 @@
 {
-"reset": {
-    "at": "03:59"
-},
-"coffee": {
-    "on": "07:30",
-    "off": "23:00"
-},
-
-"wine": {
-    "on": "sunset+30",
-    "off": "23:00"
-},
-
-"outside": {
-    "off": "sunrise"
-},
-
-"lamp": {
-    "on": "sunset-30",
-    "off": "23:30"
-},
-
-"aquarium": {
-    "on": "sunrise",
-    "off": "22:00"
+    "reset": "02:59",
+    "schedules":{
+        "coffee": {
+            "on": "06:45",
+            "off": "23:00"
+        },
+        "outside": {
+            "off": "2"
+        },
+        "lamp": {
+            "on": "sunset-30",
+            "off": "23:00"
+        },
+        "aquarium": {
+            "on": "sunrise",
+            "off": "22:00"
+        },
+        "fan": {
+            "off": "120"
+        },
+        "wine": {
+            "on": "sunset",
+            "off": "23:52" 
+        },
+        "office": {
+            "on": "sunset-30",
+            "off": "3:00 | !192.168.0.112"
+        },
+        "grow": {
+            "on": "sunrise",
+            "off": "sunset"
+        }
+    }
 }
-}
-

@@ -1,7 +1,7 @@
 var moment = require("moment-timezone");
 
-module.exports = function format(date, noQuotes){
+module.exports = function format(date, dateFormat){
     if (!date) return undefined;
-    var q = noQuotes ? '' : '"'
-    return q + moment(date).format("MM/DD/YYYY, h:mm:ssa") + q;
+    dateFormat = dateFormat || "MM/DD/YYYY, h:mm:ssa"; 
+    return moment(date).format(dateFormat);
 }

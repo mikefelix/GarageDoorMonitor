@@ -1,55 +1,60 @@
 let {get, put} = require('request'),
     EtekClient = require('./etek-client.js'),
+    log = require('./log.js')('Etek'),
     Q = require('q');
 
 module.exports = class Etek {
     constructor(login, password){
-        this.client = new EtekClient();
-        this.login = login;
-        this.password = password;
+        this.client = new EtekClient(login, password);
     }
 
     async getState(){
-        let devices = await this._getDevices();
-        let state = {};
-        for (let d of devices){
-            state[d.name] = (d.status == 'open');
-        }
-
-        return state;
+        return await this.client.getDevices();
     }
 
     async getBulbState(name){
-        let device = await this._getDevice(name);
-        return device.status == 'open';
+        let device = await this.client.getDevice(name);
+        return device.on;
     }
 
     async toggle(name, timeout) {
-        let device = await this._getDevice(name);
-        if (device.status === 'open') {
-            console.log(`Toggling device ${device.name} off.`);
-            return this.client.turnOff(device.id).then(state => state.relay != 'open');
+        let device = await this.client.getDevice(name);
+        if (device.on) {
+            log(`Toggling device ${device.name} off.`);
+            let state = await this.client.turnOff(device.id);
+            log(`Toggled off. New state is ${state.on}`);
+            return true;
         }
         else {
-            console.log(`Toggling device ${device.name} on.`);
-            return this.client.turnOn(device.id).then(state => state.relay == 'open');
+            log(`Toggling device ${device.name} on.`);
+            let state = await this.client.turnOn(device.id);
+            log(`Toggled on. New state is ${state.on}`);
+            return true;
         }
     }
 
     async on(name, timeout) {
-        let device = await this._getDevice(name);
-        console.log(`turning device ${device.name} on`);
-        return this.client.turnOn(device.id).then(state => state.relay == 'open');;
+        let device = await this.client.getDevice(name);
+        log(`Turning device ${device.name} on.`);
+        await this.client.turnOn(device.id);
+        return true;
     }
 
     async off(name) {
-        let device = await this._getDevice(name);
-        console.log(`turning device ${device.name} off`);
-        return this.client.turnOff(device.id).then(state => state.relay != 'open');;
+        let device = await this.client.getDevice(name);
+        log(`Turning device ${device.name} off.`);
+        await this.client.turnOff(device.id);
+        return true;
     }
 
-    _getDevices() {
-        return this.client.login(this.login, this.password).then(() => { return this.client.getDevices(); } );
+    /*async _getDevices() {
+        if (!this.devices) {
+            await this.client.login(this.login, this.password);
+            this.devices = await this.client.getDevices();
+            setTimeout(() => delete this.devices, 5000);
+        }
+
+        return this.devices;
     }
 
     async _getDevice(name) {
@@ -57,7 +62,7 @@ module.exports = class Etek {
         let device = devices.find(d => d.name == name);
         if (!device) throw 'Cannot find device ' + name;
         return device;
-    }
+    }*/
 
 }
 

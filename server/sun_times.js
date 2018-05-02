@@ -16,21 +16,27 @@ function getSunTimes(formatted){
     now = now.toDate();
 
     return {
-        current: formatted ? format(now, true) : now,
+        current: formatted ? format(now) : now,
         isNight: now.getTime() < sunrise || now.getTime() > sunset,
-        sunrise: formatted ? format(sunrise, true) : sunrise,
-        sunset: formatted ? format(sunset, true) : sunset,
-        dayReset: formatted ? format(fourAm, true) : fourAm
+        sunrise: formatted ? format(sunrise) : sunrise,
+        sunset: formatted ? format(sunset) : sunset,
+        dayReset: formatted ? format(fourAm) : fourAm
     };
 }
 
 const simpleTimeRegex = /^([0-9]+):([0-9]+)$/;
 const modifiedTimeRegex = /^([0-9]+):([0-9]+)([-+])([0-9]+)$/;
-const namedTimeRegex = /^([a-z0-9_]+)$/;
+const namedTimeRegex = /^([a-z][a-z0-9_]*)$/;
 const modifiedNamedTimeRegex = /^([a-z0-9_]+)([-+])([0-9]+)$/;
 
 function parse(date){
     if (!date) return undefined;
+
+    if (typeof date != 'string'){
+        console.log(`Cannot parse date of type ${typeof date}.`); 
+        console.dir(date);
+        return undefined;
+    } 
 
     try {
         let text, hour, min, op = '+', plus = 0;
@@ -62,6 +68,9 @@ function parse(date){
 
             return moment(time)
                 .add((op == '-' ? -1 : 1) * plus, 'minutes').toDate();
+        }
+        else {
+            return undefined;
         }
     }
     catch (e){
