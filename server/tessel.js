@@ -10,7 +10,7 @@ module.exports = class Tessel {
             try {
                 request(this.tesselAddress + '/' + uri, (err, res, body) => {
                     if (err){
-                        reject("Error: " + err);
+                        reject(err);
                     }
                     else {
                         resolve(body);

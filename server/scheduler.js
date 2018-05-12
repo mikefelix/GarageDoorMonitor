@@ -67,10 +67,6 @@ module.exports = class Scheduler {
             return;
         }
 
-        if (!!schedule.overridden){
-            return;
-        }
-
         let onActor = this.actors[name]['on'];
         if (onActor){
             let bulb = await this._getBulb(name);
@@ -130,7 +126,7 @@ module.exports = class Scheduler {
                     if (bulb.state){
                         if (self.timers[key] === undefined){
                             // Bulb is on but there's no timer; create it.
-                            log(`Create timer for ${trigger}.`);
+                            log(`Create timer for ${schedule} for ${trigger} minutes.`);
                             self.timers[key] = +trigger;
                         }
                         else if (self.timers[key] <= 0){
@@ -212,12 +208,15 @@ module.exports = class Scheduler {
         let self = this;
         function getActor(trigger, action, schedule, spec){
             return async (bulb) => {
-                let res = await trigger(bulb);
-                if (res){ 
-                    log(`Turn ${schedule} ${spec}.`);
-                    action(schedule, `schedule (${spec])`);
-                    delete self.timers[schedule];
+                if (!self.schedules[schedule].overridden){
+                    let res = await trigger(bulb);
+                    if (res){ 
+                        log(`Turn ${schedule} ${spec}.`);
+                        action(schedule, `schedule (${spec})`);
+                        delete self.timers[schedule];
+                    }
                 }
+                //else log(`Skipping check for ${schedule} because it has been overridden.`);
             };
         }
 

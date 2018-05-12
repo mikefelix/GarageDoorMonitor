@@ -26,10 +26,6 @@
         "office": {
             "on": "sunset-30",
             "off": "3:00 | !192.168.0.112"
-        },
-        "grow": {
-            "on": "sunrise",
-            "off": "sunset"
         }
     }
 }

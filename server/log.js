@@ -1,6 +1,6 @@
 let moment = require('moment-timezone'),
     format = require('./format.js'),
-    pad = 30;
+    pad = 32;
 
 module.exports = function(name, dateFormat) {
     if (!dateFormat) dateFormat = 'MM/DD h:mm:ssa';

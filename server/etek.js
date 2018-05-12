@@ -9,7 +9,14 @@ module.exports = class Etek {
     }
 
     async getState(){
-        return await this.client.getDevices();
+        let devices = await this.client.getDevices();
+        let result = {};
+        for (let i in devices){
+            let device = devices[i];
+            result[device.name] = device.on;
+        }
+
+        return result;
     }
 
     async getBulbState(name){
@@ -22,13 +29,13 @@ module.exports = class Etek {
         if (device.on) {
             log(`Toggling device ${device.name} off.`);
             let state = await this.client.turnOff(device.id);
-            log(`Toggled off. New state is ${state.on}`);
+            log(`Toggled off. New state is ${state.on}.`);
             return true;
         }
         else {
             log(`Toggling device ${device.name} on.`);
             let state = await this.client.turnOn(device.id);
-            log(`Toggled on. New state is ${state.on}`);
+            log(`Toggled on. New state is ${state.on}.`);
             return true;
         }
     }

@@ -36,16 +36,22 @@ module.exports = class EtekCityClient {
         formData.append('OS', 'Android');
         formData.append('DevToken', 'AkuEZmg_eu5m14eQRDxqYBsUzR-I7ZjaQtmKvU5Mw5a2');
         log('POST /login');
-        let response = await this.client.post('/login', {
-            headers: Object.assign({
-                password: this.password,
-                account: this.username,
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }, formData.getHeaders())
-        });
-        
-        this.token = response.tk;
-        this.uniqueId = response.id;
+        try {
+            let response = await this.client.post('/login', {
+                headers: Object.assign({
+                    password: this.password,
+                    account: this.username,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }, formData.getHeaders())
+            });
+            
+            this.token = response.tk;
+            this.uniqueId = response.id;
+            log(`Logged into vesync with ${this.uniqueId}/${this.token}`);
+        }
+        catch (err){
+            log('Login error: ' + err);
+        }
     }
 
     _transformResponse(device){
@@ -59,29 +65,39 @@ module.exports = class EtekCityClient {
 
     async getDevices(){
         if (!this.token) throw 'Not logged in.';
-        let response = await this.client.post('/loadMain', {
-            headers: {
-                tk: this.token,
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
-        });
-        
-        return response.devices
-            .map(device => this._transformResponse(device));
+        try {
+            let response = await this.client.post('/loadMain', {
+                headers: {
+                    tk: this.token,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+            
+            return response.devices
+                .map(device => this._transformResponse(device));
+        }
+        catch (err){
+            log('getDevices error: ' + err);
+        }
     }
 
     async getDevice(name){
         if (!this.token) throw 'Not logged in.';
-        let response = await this.client.post('/loadMain', {
-            headers: {
-                tk: this.token,
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
-        });
-        
-        return response.devices
-            .filter(device => device.deviceName == name)
-            .map(device => this._transformResponse(device))[0];
+        try {
+                let response = await this.client.post('/loadMain', {
+                headers: {
+                    tk: this.token,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+            
+            return response.devices
+                .filter(device => device.deviceName == name)
+                .map(device => this._transformResponse(device))[0];
+        }
+        catch (err){
+            log('getDevice error: ' + err);
+        }
     }
 
     async turnOn(deviceId) {
@@ -91,21 +107,29 @@ module.exports = class EtekCityClient {
         formData.append('uri', '/relay');
         formData.append('action', 'open');
 
-        let response = await this.client.post('/devRequest', {
-            headers: Object.assign({
-                tk: this.token,
-                id: this.uniqueId,
-                uniqueId: this.uniqueId,
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }, formData.getHeaders()),
-            body : {
-                cid : deviceId,
-                uri : '/relay',
-                action : 'open'
-            }
-        });
-        
-        return this._transformResponse(response);
+        try {
+            log(`curl -X POST https://server1.vesync.com:4007/devRequest -H "tk: ${this.token}" -H "id: ${this.uniqueId}" -H "uniqueId: ${this.uniqueId}" --data "cid=${deviceId}&uri=/relay&action=open"`);
+            let response = await this.client.post('/devRequest', {
+                headers: Object.assign({
+                    tk: this.token,
+                    id: this.uniqueId,
+                    uniqueId: this.uniqueId,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }, formData.getHeaders()),
+                body : {
+                    cid : deviceId,
+                    uri : '/relay',
+                    action : 'open'
+                }
+            });
+            
+            log('POST complete.');
+
+            return this._transformResponse(response);
+        }
+        catch (err){
+            log('turnOn error: ' + err);
+        }
     }
 
     async turnOff(deviceId) {
@@ -115,21 +139,29 @@ module.exports = class EtekCityClient {
         formData.append('uri', '/relay');
         formData.append('action', 'break');
 
-        let response = await this.client.post('/devRequest', {
-            headers: Object.assign({
-                tk: this.token,
-                id: this.uniqueId,
-                uniqueId: this.uniqueId,
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }, formData.getHeaders()),
-            body : {
-                cid : deviceId,
-                uri : '/relay',
-                action : 'break'
-            }
-        });
+        try {
+            log(`curl -X POST https://server1.vesync.com:4007/devRequest -H "tk: ${this.token}" -H "id: ${this.uniqueId}" -H "uniqueId: ${this.uniqueId}" --data "cid=${deviceId}&uri=/relay&action=break"`);
+            let response = await this.client.post('/devRequest', {
+                headers: Object.assign({
+                    tk: this.token,
+                    id: this.uniqueId,
+                    uniqueId: this.uniqueId,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }, formData.getHeaders()),
+                body : {
+                    cid : deviceId,
+                    uri : '/relay',
+                    action : 'break'
+                }
+            });
 
-        return this._transformResponse(response);
+            log('POST complete.');
+
+            return this._transformResponse(response);
+        }
+        catch (err){
+            log('turnOff error: ' + err);
+        }
     }
 
     getMeter(deviceId) {

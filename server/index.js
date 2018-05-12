@@ -14,13 +14,12 @@ let http = require("http"),
     Thermostat = require('./thermostat.js'),
     Times = require('./sun_times.js');
 
-if (!process.argv[15]){
-    console.log("Usage:\nnode garage.js PORT EMAIL TESSEL_URL AUTH_KEY HUE_IP HUE_KEY PUSHOVER_KEY GARAGE_BUTTON_MAC ETEK_USER ETEK_PASS THERMOSTAT_ID STRUCTURE_ID NEST_TOKEN CURRENT_WEATHER_URL");
+if (!process.argv[14]){
+    console.log("Usage:\nnode garage.js PORT EMAIL TESSEL_URL AUTH_KEY HUE_IP HUE_KEY PUSHOVER_KEY GARAGE_BUTTON_MAC ETEK_USER ETEK_PASS THERMOSTAT_ID STRUCTURE_ID NEST_TOKEN");
     throw "Invalid usage";
 }
 
 let recentLambda = false;
-let homeAwayState;
 
 const port = process.argv[2]; 
 const emailAddress = process.argv[3];
@@ -35,7 +34,6 @@ const etekPass = process.argv[11];
 const thermId = process.argv[12];
 const structureId = process.argv[13];
 const nestToken = process.argv[14];
-const currentWeatherUri = process.argv[15];
 const hueAddress = `http://${hueIp}/api/${hueKey}/lights`;
 const bulbs = new Bulbs(hueAddress, [etekUser, etekPass]);
 const therm = new Thermostat(thermId, structureId, nestToken);
@@ -161,31 +159,33 @@ async function handleRequest(request, response){
 
             return times;
         }
-        if (req == 'GET /state'){ // call from user
-            let formatTesselDate = (date) => {
-                return date ? format(date) : null;
+        if (req == 'GET /state/garage'){
+            return await getTesselState();
+        }
+        if (req == 'GET /state/lights'){
+            return await bulbs.getState();
+        }
+        if (req == 'GET /state/times'){
+            return Times.get(true);
+        }
+        if (req == 'GET /state/schedules'){
+            return scheduler.getSchedules();
+        }
+        if (req == 'GET /state/thermostat'){
+            return await therm.getState();
+        }
+        if (req == 'GET /state'){
+            let state = {
+                garage: await getTesselState(),
+                bulbs: await bulbs.getState(),
+                schedules: scheduler.getSchedules(),
+                thermostat: await therm.getState(),
+                times: Times.get(true)
             };
 
-            let tesselState = await tessel.get('state');
-            try {
-                tesselState = JSON.parse(tesselState);
-                tesselState.last_open_time = formatTesselDate(tesselState.last_open_time);
-                tesselState.last_close_time = formatTesselDate(tesselState.last_close_time);
-                tesselState.next_close_time = formatTesselDate(tesselState.next_close_time);
-                tesselState.current_time = formatTesselDate(tesselState.current_time);
-            }
-            catch (e) {
-                throw 'Error parsing Tessel state JSON: ' + tesselState;
-            }
+            state.history = state.bulbs.history;
+            delete state.bulbs.history;
 
-            let state = {};
-            state.away = homeAwayState;
-            state.garage = tesselState;
-            state.times = Times.get(true);
-            state.bulbs = await bulbs.getState();
-            state.schedules = scheduler.getSchedules();
-
-            state.thermostat = await therm.getState();
             return state;
         }
         if (req == 'DELETE /therm/away'){
@@ -228,13 +228,37 @@ async function handleRequest(request, response){
         }
         if (req == 'POST /nestaway'){ 
             log("Nest reports away state at " + format(new Date()));
-            homeAwayState = true;
             return "Got it.";
         }
         if (req == 'POST /nesthome'){ 
             log("Nest reports people coming home at " + format(new Date()));
-            homeAwayState = false;
             return "Got it.";
+        }
+        if (/(POST|GET) \/alight\/[a-z0-9]+/.test(req)){
+            let [u, meth, light] = req.match(/(POST|GET) \/alight\/([a-z0-9]+)/);
+            if (meth == 'GET')
+                return await bulbs.getBulb(light);
+            
+            if (meth == 'POST'){
+                scheduler.override(light);
+
+                let res = await bulbs.on(light, req);
+                return await bulbs.getBulb(light);
+            }
+
+            return 406;
+        }
+        if (/(POST|GET) \/unlight\/[a-z0-9]+/.test(req)){
+            let [u, meth, light] = req.match(/(POST|GET) \/unlight\/([a-z0-9]+)/);
+            if (meth == 'GET')
+                return await bulbs.getBulb(light);
+            
+            if (meth == 'POST'){
+                let res = await bulbs.off(light, req);
+                return await bulbs.getBulb(light);
+            }
+
+            return 406;
         }
         if (/(POST|GET) \/light\/[a-z0-9]+/.test(req)){
             let [u, meth, light] = req.match(/(POST|GET) \/light\/([a-z0-9]+)/);
@@ -265,6 +289,27 @@ async function handleRequest(request, response){
     }
 }
 
+async function getTesselState(){
+    let formatTesselDate = (date) => {
+        return date ? format(date) : null;
+    };
+
+    let state = {};
+    try {
+        let tesselState = await tessel.get('state');
+        tesselState = JSON.parse(tesselState);
+        tesselState.last_open_time = formatTesselDate(tesselState.last_open_time);
+        tesselState.last_close_time = formatTesselDate(tesselState.last_close_time);
+        tesselState.next_close_time = formatTesselDate(tesselState.next_close_time);
+        tesselState.current_time = formatTesselDate(tesselState.current_time);
+        return tesselState;
+    }
+    catch (e) {
+        log('Error with Tessel state: ' + e);
+        return undefined;
+    }
+}
+    
 function reply(res, msg){
     let headers = {
         'Content-type': 'application/json',
@@ -334,6 +379,20 @@ log('Sunrise time is: ' + times.sunrise);
 log('Sunset time is: ' + times.sunset);
 
 //setInterval(saveSnap, 1000 * 60 * 15);
+
+setInterval(async () => {
+    let thermState = (await therm.getState()).state != 'off';
+    let bulbState = (await bulbs.getBulb('vent')).state;
+    if (thermState && !bulbState){
+        log('Therm is on so turning on vent.');
+        bulbs.on('vent', 'furnace on');
+    }
+    else if (!thermState && bulbState){
+        log('Therm is off so turning off vent.');
+        bulbs.off('vent', 'furnace off');
+    }
+
+}, 58000);
 
 setInterval(async () => {
    let bulb = await bulbs.getBulb('driveway');
