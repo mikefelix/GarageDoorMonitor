@@ -1,0 +1,15 @@
+{
+    "port": "",
+    "email": "",
+    "tessel_url": "",
+    "auth_key": "", 
+    "hue_ip": "", 
+    "hue_key": "", 
+    "pushover_key": "", 
+    "etek_base_url": "",
+    "etek_user": "", 
+    "etek_pass": "", 
+    "thermostat_id": "", 
+    "structure_id": "", 
+    "nest_token": ""
+}

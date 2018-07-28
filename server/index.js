@@ -8,58 +8,88 @@ let http = require("http"),
     moment = require("moment-timezone"),
     exec = require('child_process').exec,
     mail = require('./mail.js').send,
+    Garage = require('./garage.js'),
     Scheduler = require('./scheduler.js'),
     Bulbs = require('./bulbs.js'),
-    Tessel = require('./tessel.js'),
     Thermostat = require('./thermostat.js'),
     Times = require('./sun_times.js');
 
-if (!process.argv[14]){
-    console.log("Usage:\nnode garage.js PORT EMAIL TESSEL_URL AUTH_KEY HUE_IP HUE_KEY PUSHOVER_KEY GARAGE_BUTTON_MAC ETEK_USER ETEK_PASS THERMOSTAT_ID STRUCTURE_ID NEST_TOKEN");
-    throw "Invalid usage";
+const config = JSON.parse(fs.readFileSync('./config.json'));
+for (let key of ["port", "email", "tesselUrl", "authKey", "hueIp", "hueKey", "pushoverKey", "etekBaseUrl", "etekUser", "etekPass", "thermostatId", "structureId", "nestToken"]){
+    if (!config[key]){
+        log('Key required in config: ' + key);
+        process.exit(1);
+    }
 }
 
 let recentLambda = false;
-
-const port = process.argv[2]; 
-const emailAddress = process.argv[3];
-const tessel = new Tessel(process.argv[4]);
-const authKey = process.argv[5];
-const hueIp = process.argv[6];
-const hueKey = process.argv[7];
-// const pushoverKey = process.argv[8];
-const garageButtonMac = process.argv[9];
-const etekUser = process.argv[10];
-const etekPass = process.argv[11];
-const thermId = process.argv[12];
-const structureId = process.argv[13];
-const nestToken = process.argv[14];
-const hueAddress = `http://${hueIp}/api/${hueKey}/lights`;
-const bulbs = new Bulbs(hueAddress, [etekUser, etekPass]);
-const therm = new Thermostat(thermId, structureId, nestToken);
-
+const bulbs = new Bulbs(
+    `http://${config.hueIp}/api/${config.hueKey}/lights`, 
+    [config.etekUser, config.etekPass, config.etekBaseUrl]
+);
+const therm = new Thermostat(
+        config.thermostatId, 
+        config.structureId, 
+        config.nestToken
+);
+const garage = new Garage(
+        config.tesselUrl, 
+        bulbs
+);
 const scheduler = new Scheduler(
     './schedules.json',
-    bulbs.getBulb.bind(bulbs),
-    bulbs.on.bind(bulbs),
-    bulbs.off.bind(bulbs)
+    getSystemState,
+    turnOn,
+    turnOff
 );
 
-async function doOpen(uri){
+function turnOn(name, reason){
+    return name == 'housefan' ?
+        therm.set.bind(therm)('fan', 30) :
+        bulbs.on.bind(bulbs)(name, reason);
+}
+
+function turnOff(name, reason){
+    return name == 'housefan' ?
+        //therm.set.bind(therm)('fan', 0) :
+        () => {} :
+        bulbs.off.bind(bulbs)(name, reason);
+}
+
+/*function getDevice(name){
+    return name == 'furnace' || name == 'housefan' ?
+        therm.getState() :
+        bulbs.getBulb(name);
+}*/
+
+/*function doOpen(uri){
     if (Times.get().isNight){
         bulbs.on('outside', 180, 'garage opened at night via app');
     }
     
-    if (/open[0-9]+/.test(uri)){
-        let time = uri.match(/open([0-9]+)/)[1];
-        log(`Garage open ${time} command received at ${new Date}.`);
-        //log((!response ? 'Button' : 'App') + ' open ' + time + ' command received at ' + new Date());
-        return await tessel.post('open' + time);
-    }
-    else {
-        log(`Open indefinitely command received at ${new Date()}.`);
-        return await tessel.post('open0');
-    }
+    return new Promise((resolve, reject) => {
+        try {
+            let time;
+            if (/open[0-9]+/.test(uri)){
+                time = uri.match(/open([0-9]+)/)[1];
+                log(`Garage open ${time} command received.`);
+            }
+            else {
+                time = 0;
+                log(`Garage open indefinitely command received.`);
+            }
+
+            tessel.post('open' + time);
+
+            setTimeout(async () => {
+                resolve(await tessel.get('state'));
+            }, 4000);
+        }
+        catch (e){
+            log(`Error: ${e}`);
+            reject(e);
+        }
+    });
 }
 
 function saveSnap(after){
@@ -72,27 +102,266 @@ function saveSnap(after){
         });
     }
 }
+*/
+
+async function getSystemState(){
+    let thermState = await therm.getState();
+
+    let state = {
+        away: thermState.away,
+        garage: await garage.getState(),
+        bulbs: await bulbs.getState(),
+        schedules: scheduler.getSchedules(),
+        hvac: {
+            humidity: thermState.humidity,
+            temp: thermState.temp,
+            target: thermState.target,
+            state: thermState.state,
+            mode: thermState.mode,
+            on: thermState.state == 'heating' || thermState.state == 'cooling'
+        },
+        housefan: {
+            on: thermState.on,
+            offTime: thermState.fanOffTime
+        },
+        times: Times.get(true)
+    };
+
+    let temp = state.hvac.temp, target = state.hvac.target;
+    if (state.hvac.mode == 'cool')
+        state.hvac.nearTarget = temp >= target && temp - target <= 2;
+    else if (state.hvac.mode == 'heat')
+        state.hvac.nearTarget = temp <= target && target - temp <= 2;
+
+    state.history = state.bulbs.history;
+    delete state.bulbs.history;
+    return state;
+}
+
 process.on('uncaughtException', function (err) {
     log(' uncaughtException: ' + err.message);
     console.log(err.stack);
+    process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled promise rejection. Reason: ' + reason);
+    process.exit(1);
 });
 
 function verifyAuth(req){
-    if (new RegExp('auth=' + authKey).test(req.url))
+    log(`Verify auth for ${req.url}.`);
+    log(`${JSON.stringify(req.headers)}`);
+    if (new RegExp('auth=' + config.authKey).test(req.url))
         return true;
-    if (req.headers.Authorization == authKey)
+
+    if (req.headers.authorization == config.authKey)
         return true;
 
     return false;
 }
 
+const routes = {
+    'POST /test(.)(.)': async (request, a, b) => {
+        console.log(`args: ${a}, ${b}`);
+        return 200;
+    },
+    'POST /warn1': async () => {
+        return 200;
+    }, 
+    'POST /warn2': async () => {
+        mail("Garage failed to close", "Garage didn't shut when I tried. Trying again.");
+        return 200;
+    },
+    'POST /warn3': async () => {
+        mail("Garage is stuck open!", "Garage is open and I cannot shut it! I tried twice.");
+        return 200;
+    },
+    'POST /alive': async () => { // ping from tessel
+        log("Tessel reports that it is alive.");
+        return 200;
+    },
+    'POST /opened([0-9+])?': async (request, t) => { // call from tessel
+        if (!t) t = 'indefinitely';
+
+        if (Times.get().isNight)
+            bulbs.on('outside', 180, 'garage opened at night');
+
+        log(`Tessel reports opened ${t} state.`);
+        saveSnap(10);
+        return "opened alert received";
+    },
+    'POST /closed': async () => { // call from tessel
+        log('Tessel reports closed state.');
+        saveSnap(0);
+        return "closed alert received";
+    },
+    'POST /close': async () => { // call from user
+        log('Close command received.');
+        let msg = await tessel.post('close');
+        log('Tessel replies: ' + msg);
+        return msg;
+    },
+    'POST /open([0-9]+)': async (request, time) => { // call from user
+        return await doOpen(time, request.url);
+    },
+    'GET /time': async () => { // call from user
+        let times = Times.get(true);
+        for (let t in times){
+            if (t != 'isNight') times[t] = format(times[t]);
+        }
+
+        return times;
+    },
+    'GET /state/garage': async () => {
+        return await garage.getState();
+    },
+    'GET /state/lights': async () => {
+        return await bulbs.getState();
+    },
+    'GET /state/lights/hue': async () => {
+        return await bulbs.getHueState();
+    },
+    'GET /state/lights/wemo': async () => {
+        return await bulbs.getWemoState();
+    },
+    'GET /state/lights/etek': async () => {
+        return await bulbs.getEtekState();
+    },
+    'GET /state/times': async () => {
+        return Times.get(true);
+    },
+    'GET /state/schedules': async () => {
+        return scheduler.getSchedules();
+    },
+    'GET /state/thermostat': async () => {
+        return await therm.getState();
+    },
+    'POST /state/thermostat': async () => {
+        return await therm.moveTemp1();
+    },
+    'GET /state': async () => {
+        let state = {
+            garage: await garage.getState(),
+            bulbs: await bulbs.getState(),
+            schedules: scheduler.getSchedules(),
+            thermostat: await therm.getState(),
+            times: Times.get(true)
+        };
+
+        state.history = state.bulbs.history;
+        delete state.bulbs.history;
+
+        return state;
+    },
+    'DELETE /therm/away': async () => {
+        return await therm.set('away', false);
+    },
+    'PUT /therm/away': async () => {
+        return await therm.set('away', true);
+    },
+    'POST /therm/temp([0-9]+)': async (request, temp) => {
+        return await therm.set('target_temperature_f', temp);
+    },
+    'POST /therm/fan([0-9]+)': async (request, duration) => {
+        if (!duration) duration = 15;
+        return await therm.set('fan', duration);
+    },
+    'POST /button': async () => { // Call from AWS Lambda
+        if (Times.get().isNight){
+            if (!recentLambda){
+                log('IoT button pressed at night; turning on outside bulbs.');
+                bulbs.on('outside', 180, 'IoT button');
+                recentLambda = true;
+                setTimeout(() => recentLambda = false, 60000);
+            }
+            else {
+                log('IoT button pressed again at night; opening garage.');
+                doOpen(0, request.url);
+                recentLambda = false;
+            }
+        }
+        else {
+            log('IoT button pressed in daytime; opening garage.');
+            doOpen(request.url);
+        }
+
+        return 202;
+    },
+    'GET /nestredirect': async () => {
+        log(request.url);
+        return 202;
+    },
+    'POST /nestaway': async () => {
+        log("Nest reports away state at " + format(new Date()));
+        return "Got it.";
+    },
+    'POST /nesthome': async () => {
+        log("Nest reports people coming home at " + format(new Date()));
+        return "Got it.";
+    },
+    '(POST|GET) /(light|alight|unlight)/([a-z0-9_]+)': async (request, meth, action, light) => {
+        log(`${meth} ${action} ${light} ${request.url}`);
+        if (meth == 'GET')
+            return await bulbs.getBulb(light);
+
+        if (meth == 'POST'){
+            scheduler.toggleOverride(light);
+            bulbs.toggleOverride(light);
+
+            let get;
+            if (action == 'light')
+                get = bulbs.toggle;
+            else if (action == 'alight')
+                get = bulbs.on;
+            else if (action == 'unlight')
+                get = bulbs.off;
+
+            return await get.bind(bulbs)(light, request.url); 
+        }
+
+        return 406;
+    }
+};
+
 async function handleRequest(request, response){
     let req = request.method + ' ' + request.url.replace(/\?.*$/, '');
-    if (req != 'GET /state')
+    if (!req.match('^GET /state'))
+        log(`Received call at ${format(new Date())}: ${req}`);
+
+    try {
+        for (let route in routes){
+            let match;
+            if (match = req.match(new RegExp(route))){
+                if (!req.match(/^GET/) && !verifyAuth(request)){
+                    log('Unauthorized request for ' + req);
+                    return 401;
+                }
+
+                let args = [request];
+                for (let i = 1; match.hasOwnProperty(i); i++){ 
+                    args.push(match[i]);
+                    console.log(`${i} -> ${match[i]}`);
+                }
+
+                return await routes[route].apply(null, args);
+            }
+            //else log(`${route} does not match ${req}`);
+        }
+
+        log('Unknown URI: ' + req);
+        return 404;
+    }
+    catch (e){
+        log(`Caught error during request ${req}: ${e}`);
+        return 500;
+    }
+}
+
+/*
+async function handleRequestOld(request, response){
+    let req = request.method + ' ' + request.url.replace(/\?.*$/, '');
+    if (!req.match('^GET /state'))
         log(`Received call at ${format(new Date())}: ${req}`);
 
     try {
@@ -132,9 +401,7 @@ async function handleRequest(request, response){
         if (req.match(/^POST \/close/)){ // call from user
             if (verifyAuth(request)){
                 log('Close command received at ' + new Date());
-                let msg = await tessel.post('close');
-                log('Tessel replies: ' + msg);
-                return msg;
+                return await garage.close();
             }
             else {
                 log('401 on close command at ' + new Date());
@@ -143,7 +410,8 @@ async function handleRequest(request, response){
         }
         if (req.match(/^POST \/open/)){ // call from user
             if (verifyAuth(request)){
-                return await doOpen(request.url);
+                let [r, time] = request.url.match(/open([0-9]*)/);
+                return await garage.open(time);
             }
             else {
                 log('Unknown auth while attempting to open garage at ' + new Date() + ': ');
@@ -160,10 +428,19 @@ async function handleRequest(request, response){
             return times;
         }
         if (req == 'GET /state/garage'){
-            return await getTesselState();
+            return await garage.getState();
         }
         if (req == 'GET /state/lights'){
             return await bulbs.getState();
+        }
+        if (req == 'GET /state/lights/hue'){
+            return await bulbs.getHueState();
+        }
+        if (req == 'GET /state/lights/wemo'){
+            return await bulbs.getWemoState();
+        }
+        if (req == 'GET /state/lights/etek'){
+            return await bulbs.getEtekState();
         }
         if (req == 'GET /state/times'){
             return Times.get(true);
@@ -174,27 +451,35 @@ async function handleRequest(request, response){
         if (req == 'GET /state/thermostat'){
             return await therm.getState();
         }
+        if (req == 'POST /state/thermostat'){
+            return await therm.moveTemp1();
+        }
         if (req == 'GET /state'){
-            let state = {
-                garage: await getTesselState(),
-                bulbs: await bulbs.getState(),
-                schedules: scheduler.getSchedules(),
-                thermostat: await therm.getState(),
-                times: Times.get(true)
-            };
-
-            state.history = state.bulbs.history;
-            delete state.bulbs.history;
-
-            return state;
+            return await getSystemState();
         }
         if (req == 'DELETE /therm/away'){
+            if (!verifyAuth(request))
+                return 401;
+            
             return await therm.set('away', false);
         }
         if (req == 'PUT /therm/away'){
+            if (!verifyAuth(request))
+                return 401;
+            
             return await therm.set('away', true);
         }
+        if (req.match(/^POST \/therm\/temp[0-9]+/)){ 
+            if (!verifyAuth(request))
+                return 401;
+            
+            let temp = req.url.match(/temp([0-9]+)/)[1];
+            return await therm.set('target_temperature_f', temp);
+        }
         if (req.match(/^POST \/therm\/fan/)){ 
+            if (!verifyAuth(request))
+                return 401;
+            
             let duration = !/fan[0-9]+/.test(req.url) ? 15 : req.url.match(/fan([0-9]+)/)[1];
             return await therm.set('fan', duration);
         }
@@ -240,7 +525,8 @@ async function handleRequest(request, response){
                 return await bulbs.getBulb(light);
             
             if (meth == 'POST'){
-                scheduler.override(light);
+                scheduler.toggleOverride(light);
+                bulbs.toggleOverride(light);
 
                 let res = await bulbs.on(light, req);
                 return await bulbs.getBulb(light);
@@ -254,6 +540,8 @@ async function handleRequest(request, response){
                 return await bulbs.getBulb(light);
             
             if (meth == 'POST'){
+                scheduler.toggleOverride(light);
+                bulbs.toggleOverride(light);
                 let res = await bulbs.off(light, req);
                 return await bulbs.getBulb(light);
             }
@@ -266,15 +554,11 @@ async function handleRequest(request, response){
                 return await bulbs.getBulb(light);
             
             if (meth == 'POST'){
-                scheduler.override(light);
+                scheduler.toggleOverride(light);
+                bulbs.toggleOverride(light);
 
                 let res = await bulbs.toggle(light, req);
-                //if (res){
-                    return await bulbs.getBulb(light);
-                //}
-                //else {
-                    //return 500;
-                //}
+                return await bulbs.getBulb(light);
             }
 
             return 406;
@@ -288,28 +572,8 @@ async function handleRequest(request, response){
         return 500;
     }
 }
+*/
 
-async function getTesselState(){
-    let formatTesselDate = (date) => {
-        return date ? format(date) : null;
-    };
-
-    let state = {};
-    try {
-        let tesselState = await tessel.get('state');
-        tesselState = JSON.parse(tesselState);
-        tesselState.last_open_time = formatTesselDate(tesselState.last_open_time);
-        tesselState.last_close_time = formatTesselDate(tesselState.last_close_time);
-        tesselState.next_close_time = formatTesselDate(tesselState.next_close_time);
-        tesselState.current_time = formatTesselDate(tesselState.current_time);
-        return tesselState;
-    }
-    catch (e) {
-        log('Error with Tessel state: ' + e);
-        return undefined;
-    }
-}
-    
 function reply(res, msg){
     let headers = {
         'Content-type': 'application/json',
@@ -370,34 +634,14 @@ http.createServer((request, response) => {
             reply(response, 500);
         });
     }
-}).listen(port);
+}).listen(config.port);
 
 let times = Times.get(true);
-log(`Process started on ${port}. Times for today:`);
+log(`Process started on ${config.port}. Times for today:`);
 log('Current time is: ' + times.current);
 log('Sunrise time is: ' + times.sunrise);
 log('Sunset time is: ' + times.sunset);
 
 //setInterval(saveSnap, 1000 * 60 * 15);
 
-setInterval(async () => {
-    let thermState = (await therm.getState()).state != 'off';
-    let bulbState = (await bulbs.getBulb('vent')).state;
-    if (thermState && !bulbState){
-        log('Therm is on so turning on vent.');
-        bulbs.on('vent', 'furnace on');
-    }
-    else if (!thermState && bulbState){
-        log('Therm is off so turning off vent.');
-        bulbs.off('vent', 'furnace off');
-    }
 
-}, 58000);
-
-setInterval(async () => {
-   let bulb = await bulbs.getBulb('driveway');
-   if (bulb.state){
-       log(`I see the driveway on at ${format(new Date())}. Why??? Shutting it off.`);
-       bulbs.off('driveway');
-   }
-}, 60000);

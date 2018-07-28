@@ -1,11 +1,11 @@
 let FormData = require('form-data'),
-    log = require('./log.js')('Etek-client');
+    log = require('./log.js')('Etek-client', false);
 
 module.exports = class EtekCityClient {
-    constructor(username, password) {
+    constructor(username, password, baseUrl) {
         const HyperRequest = require('hyper-request');
         this.client = new HyperRequest({
-            baseUrl: 'https://server1.vesync.com:4007',
+            baseUrl: baseUrl,
             disablePipe: true,
             respondWithProperty: false,
             parserFunction: function (data) {
@@ -15,7 +15,7 @@ module.exports = class EtekCityClient {
 
         this.username = username;
         this.password = password;
-        this.logIn();
+        //this.logIn();
     }
 
     static get HISTORIC_STAT_TYPES() {
@@ -48,9 +48,11 @@ module.exports = class EtekCityClient {
             this.token = response.tk;
             this.uniqueId = response.id;
             log(`Logged into vesync with ${this.uniqueId}/${this.token}`);
+            return true;
         }
         catch (err){
             log('Login error: ' + err);
+            return false;
         }
     }
 
@@ -64,8 +66,15 @@ module.exports = class EtekCityClient {
     }
 
     async getDevices(){
-        if (!this.token) throw 'Not logged in.';
         try {
+            if (!this.token){
+                log('Logging in...');
+                if (!await this.logIn()){ 
+                    log('Login failed.');
+                    return {};
+                }
+            }
+
             let response = await this.client.post('/loadMain', {
                 headers: {
                     tk: this.token,
@@ -78,13 +87,21 @@ module.exports = class EtekCityClient {
         }
         catch (err){
             log('getDevices error: ' + err);
+            return {};
         }
     }
 
     async getDevice(name){
-        if (!this.token) throw 'Not logged in.';
         try {
-                let response = await this.client.post('/loadMain', {
+            if (!this.token){
+                log('Logging in...');
+                if (!await this.logIn()){ 
+                    log('Login failed.');
+                    return undefined;
+                }
+            }
+
+            let response = await this.client.post('/loadMain', {
                 headers: {
                     tk: this.token,
                     'Content-Type': 'application/x-www-form-urlencoded'
@@ -97,6 +114,7 @@ module.exports = class EtekCityClient {
         }
         catch (err){
             log('getDevice error: ' + err);
+            return undefined;
         }
     }
 
@@ -182,13 +200,13 @@ module.exports = class EtekCityClient {
                 uri : '/getRuntime'
             }
         }).then(response => {
-            if(response.power !== 'NaN'){
+            if (response.power && response.power !== 'NaN'){
                 response.power = this.parseNumeric(response.power).current;
             }
-            if(response.voltage !== 'NaN'){
+            if (response.voltage && response.power !== 'NaN'){
                 response.voltage = this.parseNumeric(response.voltage).current;
             }
-            if(response.current !== 'NaN'){
+            if (response.current && response.power !== 'NaN'){
                 response.current = this.parseNumeric(response.current).current;
             }
             return response;
@@ -226,7 +244,7 @@ module.exports = class EtekCityClient {
                 zoneOffset: timeZoneOffset
             }
         }).then(response => {
-            if(type === EtekCityClient.HISTORIC_STAT_TYPES.EXT_DAY) {
+            if (type === EtekCityClient.HISTORIC_STAT_TYPES.EXT_DAY) {
                 return {
                     //API has it spelt cuurentDay...dont ask
                     currentDay: round ? this._round(response.cuurentDay) : response.cuurentDay,
@@ -234,7 +252,7 @@ module.exports = class EtekCityClient {
                     thirtyDay: round ? this._round(response.thirtyDay) : response.thirtyDay
                 };
             }
-            else if(Array.isArray(response)){
+            else if (Array.isArray(response)){
                 return response.map(e => { return { value : e }; });//future put timestamp in
             }
             return response;

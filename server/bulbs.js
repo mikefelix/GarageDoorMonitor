@@ -10,20 +10,20 @@ let doAfterSeconds = (after, doThis) => {
 
 module.exports = class Bulbs {
     constructor(hueAddress, etekCreds){
-        this.wemoBulbs = ['lamp', 'aquarium'];
-        this.etekBulbs = ['coffee', 'fan', 'wine', 'office', 'vent', 'stereo'];
+        this.wemoBulbs = ['fan', 'vent', 'lamp'];
+        this.etekBulbs = ['coffee', 'piano', 'wine', 'office', 'stereo', 'aquarium'];
         this.hueBulbs = {
             garage: [1],
             breezeway: [2],
             driveway: [3,4],
-            //outside: ['garage','breezeway','driveway']
             outside: ['garage','breezeway']
         };
 
         this.hue = new Hue(hueAddress, this.hueBulbs);
         this.wemo = new Wemo(this.wemoBulbs);
-        this.etek = new Etek(etekCreds[0], etekCreds[1]);
+        this.etek = new Etek(etekCreds[0], etekCreds[1], etekCreds[2], this.etekBulbs);
         this.history = {};
+        this.overrides = {};
 
         for (let bulb of this.etekBulbs){
             this.history[bulb] = {};
@@ -38,16 +38,24 @@ module.exports = class Bulbs {
         }
     }
 
+    toggleOverride(name){
+        this.overrides[name] = this.overrides[name] != true;
+    }
+
     async getBulb(name){
         try {
             let handler = this._getHandler(name);
             //log(`Get bulb ${name}`);
             let state = await handler.getBulbState(name);
 
-            return {
-                state: state,
-                history: this.history[name]
+            let ret = {
+                on: state.on,
+                power: state.power,
+                history: this.history[name],
+                overridden: !!this.overrides[name]
             };
+
+            return ret;
         }
         catch (e){
             log(`Couldn't get state for bulb ${name}: ${e}`);
@@ -70,6 +78,10 @@ module.exports = class Bulbs {
         return await this.getBulb(bulbName);
     }
 
+    async getHueState() { return await this.hue.getState(); }
+    async getWemoState() { return await this.wemo.getState(); }
+    async getEtekState() { return await this.etek.getState(); }
+
     async getState(){
         let hueState = await this.hue.getState();
         let wemoState = await this.wemo.getState();
@@ -78,6 +90,10 @@ module.exports = class Bulbs {
         state = Object.assign(state, etekState);
         state.history = this.history;
         return state;
+    }
+
+    _hasMeter(name){
+        return this.etekBulbs.indexOf(name.toLowerCase()) >= 0;
     }
 
     _getHandler(name) {
@@ -147,7 +163,7 @@ module.exports = class Bulbs {
         else if (action == 'off')
             [act, react, expectedState] = [handler.off, undefined, false];
         else if (action == 'toggle')
-            [act, react, expectedState] = [handler.toggle, handler.toggle, !currentState];
+            [act, react, expectedState] = [handler.toggle, handler.toggle, !currentState.on];
         else
             throw 'Unknown action ' + action;
 
@@ -158,32 +174,33 @@ module.exports = class Bulbs {
             });
         }
 
-        if (expectedState != currentState){
+        if (expectedState != currentState.on){
             let tried = 0;
             do {
                 log(`Toggling ${bulbName} to ${expectedState} for ${source || 'unknown reason'}.`);
                 tried++;
                 await act.call(handler, bulbName);
-                log(`Made call. Checking result.`);
+                //log(`Made call. Checking result.`);
                 currentState = await handler.getBulbState(bulbName);
-                log(`New state is ${currentState}.`);
+                if (currentState.on != expectedState)
+                    log(`Retrying because new state is ${currentState.on} instead of ${expectedState}.`);
             }
-            while (tried < 10 && expectedState != currentState);
+            while (tried < 10 && expectedState != currentState.on);
 
             if (tried > 1){
                 log(`Toggling ${bulbName} to ${expectedState} took ${tried} tries!`);
             }
 
             if (tried >= 10) {
-                log(`Could not change ${bulbName} to ${currentState} after ${tried} tries.`);
+                log(`Could not change ${bulbName} to ${currentState.on} after ${tried} tries.`);
             }
         }
 
         if (action == 'toggle')
-            action = action + (currentState ? ' on' : ' off');
+            action = action + (currentState.on ? ' on' : ' off');
 
         this._record(bulbName, action, source || 'unknown');
-        return currentState;
+        return currentState.on;
     }
 
 }

@@ -1,10 +1,11 @@
 let {get, put} = require('request'),
     format = require('./format.js'),
-    log = require('./log.js')('Hue'),
+    log = require('./log.js')('Hue', false),
     Q = require('q');
 
 module.exports = class Hue {
     constructor(address, bulbs){
+        log(`Hue starting at ${address}`);
         this.hueAddress = address;
         this.bulbs = bulbs;
     }
@@ -18,7 +19,9 @@ module.exports = class Hue {
             for (let j = 0; j < bulbs.length; j++){
                 try {
                     let state = await this.getBulbState(bulbs[j]);
-                    totalState[name] = !!(totalState[name] || state);
+                    log(`state ${state}`);
+                    if (!totalState[name]) totalState[name] = {on: false};
+                    totalState[name].on = (totalState[name].on || state.on);
                 }
                 catch (e){
                     log(`Error getting hue state for bulb ${name}: ${e}`);
@@ -57,7 +60,7 @@ module.exports = class Hue {
             }
         }
 
-        return !!state;
+        return {on: !!state};
     }
 
     async toggle(bulb, timeout) {

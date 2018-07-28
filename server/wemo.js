@@ -1,5 +1,5 @@
 const WemoClient = require('wemo-client'),
-      log = require('./log.js')('Wemo'),
+      log = require('./log.js')('Wemo', false),
       wemo = new WemoClient();
 
 module.exports = class Wemo {
@@ -32,26 +32,26 @@ module.exports = class Wemo {
         bulb = this._lowercase(bulb);
         let client = await this._getClient(bulb);
         let state = await this._getClientState(client);
-        return state === '1' || state === 1 || state === true;
+        return {on: state === '1' || state === 1 || state === true};
     }
 
-    on(name, timeout){
+    async on(name, timeout){
         name = this._lowercase(name);
-        return this._changeState(name, true);
+        return await this._changeState(name, true);
     }
 
-    off(name){ 
+    async off(name){ 
         name = this._lowercase(name);
-        return this._changeState(name, false);
+        return await this._changeState(name, false);
     }
 
-    toggle(name, timeout){ 
+    async toggle(name, timeout){ 
         name = this._lowercase(name);
-        return this._changeState(name);
+        return await this._changeState(name);
     }
     
     async _changeState(name, newState, retrying){
-        log(`Change ${name} to ${newState} (retrying ${!!retrying})`);
+        log(`Change ${name} to ${newState}${retrying ? ' (retrying)' : ''}.`);
         try {
             let client = await this._getClient(name);
             //log('Client found for ' + name + ': '); console.dir(client);
@@ -145,7 +145,7 @@ module.exports = class Wemo {
                         resolve(true);
                     }
                     else {
-                        log("was already in state " + state + ".");
+                        log("Was already in state " + state + ".");
                         //resolve(false);
                         resolve(true);
                     }

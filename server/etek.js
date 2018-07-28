@@ -1,11 +1,13 @@
 let {get, put} = require('request'),
     EtekClient = require('./etek-client.js'),
-    log = require('./log.js')('Etek'),
+    log = require('./log.js')('Etek', false),
     Q = require('q');
 
 module.exports = class Etek {
-    constructor(login, password){
-        this.client = new EtekClient(login, password);
+    constructor(login, password, baseUrl, bulbs){
+        log(`Etek starting with ${login}/${password}/${baseUrl}`);
+        this.client = new EtekClient(login, password, baseUrl);
+        this.bulbs = bulbs;
     }
 
     async getState(){
@@ -13,15 +15,31 @@ module.exports = class Etek {
         let result = {};
         for (let i in devices){
             let device = devices[i];
-            result[device.name] = device.on;
+            if (this.bulbs.indexOf(device.name) >= 0){
+                let meter = await this.client.getMeter(device.id);
+                result[device.name] = {
+                    on: device.on,
+                    power: meter.power
+                };
+            }
         }
 
         return result;
     }
 
+    async getMeter(name){
+        let device = await this.client.getDevice(name);
+        let meter = await this.client.getMeter(device.id);
+        return meter.power;
+    }
+
     async getBulbState(name){
         let device = await this.client.getDevice(name);
-        return device.on;
+        let meter = await this.client.getMeter(device.id);
+        return {
+            on: device.on,
+            power: meter
+        };
     }
 
     async toggle(name, timeout) {

@@ -1,28 +1,74 @@
 let axios = require("axios"),
+    format = require('./format.js'),
     log = require("./log.js")("Therm");
         
 module.exports = class Thermostat {
     constructor(thermId, structureId, nestToken){
+        //log(`Therm starting with ${thermId}/${structureId}/${nestToken}`);
         this.thermId = thermId;
         this.structureId = structureId;
         this.nestToken = nestToken;
+        this.refreshAwayEvery = 5;
+        this.refreshAwayCounter = 0;
+        this.away = false;
+        this.canCall = true;
+        this.backoff = 1;
+    }
+
+    async refreshState(){
+        if (this.refreshAwayCounter == 0){
+            let res = await this._callThermostat('away');
+            if (!res || !res.data){
+                log('No data found in away response.');
+                this.away = false;
+            } 
+            else {
+                let away = res.data.away != 'home';
+                if (away != this.away) log(`Set away to ${away} (${res.data.away}).`);
+                this.away = away;
+            }
+        }
+        
+        this.refreshAwayCounter = (this.refreshAwayCounter + 1) % this.refreshAwayEvery;
+
+        let res = await this._callThermostat();
+        this.state = this._trimThermResponse(res);
     }
 
     async getState(){
-        let therm = this._trimThermResponse(await this._callThermostat());
-        let struc = this._trimThermResponse(await this._callThermostat('away'));
-        return Object.assign(struc, therm);
+        if (this.canCall){
+            //log('getState() is calling.');
+            await this.refreshState();
+            this.canCall = false;
+            setTimeout(() => this.canCall = true, this.backoff * 57000);
+        }
+        //else log('getState()');
+
+        return this.state;
     }
 
     async set(prop, value){
+        log(`Set ${prop} to ${value}.`);
         return await this._callThermostat(prop, value);
+    }
+
+    async moveTemp1(){
+        let state = await this.getState();
+        if (state.target_temperature_f){
+            if (state.mode == 'cool'){
+                await this.set('target_temperature_f', state.target_temperature_f - 1);
+            }
+            else if (state.mode == 'heat'){
+                await this.set('target_temperature_f', state.target_temperature_f + 1);
+            }
+        }
     }
 
     _trimThermResponse(res){
         if (!res || !res.data) return undefined;
         let data = res.data;
-        if (data.away)
-            return { away: data.away == 'away' };
+        if (!data)
+            throw 'No data found in response.';
 
         let fanTimeout = data.fan_timer_timeout;
         let fanOffTime = (!fanTimeout || fanTimeout == '1970-01-01T00:00:00.000Z') ? undefined : format(fanTimeout);
@@ -31,9 +77,12 @@ module.exports = class Thermostat {
             state = 'fan';
 
         return {
+            away: this.away,
             temp: data.ambient_temperature_f,
+            target: data.target_temperature_f,
             humidity: data.humidity,
             state,
+            on: state != 'off',
             mode: data.hvac_mode,
             fanOffTime 
         };
@@ -54,7 +103,7 @@ module.exports = class Thermostat {
                     fan_timer_duration: value
                 };
             }
-            if (prop == 'fan' && !value){
+            else if (prop == 'fan' && !value){
                 data = {
                     fan_timer_active: false
                 };
@@ -66,17 +115,26 @@ module.exports = class Thermostat {
 
             let method = data ? 'PUT' : 'GET';
 
-            //log(`${method} to ${url}`);
-            let req = await axios({ method, url, data, headers: {
+            //if (method != 'GET') log(`${method} to ${url} with data: ${JSON.stringify(data)}`);
+            let res = await axios({ method, url, data, headers: {
                     'Authorization': auth,
                     'Content-type': 'application/json'
                 }
             });
             
-            return req;
+            if (prop == 'fan' && value && this.state.state == 'off')
+                this.state.state = 'fan';
+                
+            return res;
         }
         catch (err){
-            log('Error: ' + err);
+            log(`Error while calling Nest (${prop ? prop : 'therm'}): ${err}`);
+            if (/429/.test(err)){
+                this.backoff = this.backoff + 1;
+                log(`429 from Nest. Increasing backoff to ${this.backoff}.`);
+            }
+
+            return undefined;
         }
     }
 }

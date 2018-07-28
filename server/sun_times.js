@@ -1,6 +1,6 @@
-var suncalc = require("suncalc");
-var moment = require('moment-timezone');
-var format = require('./format.js');
+let suncalc = require("suncalc");
+let moment = require('moment-timezone');
+let format = require('./format.js');
 
 function getSunTimes(formatted){
     let tz = 'America/Denver'; // Was I using this?
@@ -25,6 +25,7 @@ function getSunTimes(formatted){
 }
 
 const simpleTimeRegex = /^([0-9]+):([0-9]+)$/;
+const tomorrowTimeRegex = /^\+([0-9]+):([0-9]+)$/;
 const modifiedTimeRegex = /^([0-9]+):([0-9]+)([-+])([0-9]+)$/;
 const namedTimeRegex = /^([a-z][a-z0-9_]*)$/;
 const modifiedNamedTimeRegex = /^([a-z0-9_]+)([-+])([0-9]+)$/;
@@ -33,7 +34,7 @@ function parse(date){
     if (!date) return undefined;
 
     if (typeof date != 'string'){
-        console.log(`Cannot parse date of type ${typeof date}.`); 
+        console.log(`Cannot parse date of type ${typeof date}.`);
         console.dir(date);
         return undefined;
     } 
@@ -43,6 +44,10 @@ function parse(date){
         if (simpleTimeRegex.test(date)){
             [text, hour, min] = date.match(simpleTimeRegex);
             return moment().startOf('day').add(hour, 'hours').add(min, 'minutes').toDate();
+        }
+        else if (tomorrowTimeRegex.test(date)){
+            [text, hour, min] = date.match(tomorrowTimeRegex);
+            return moment().startOf('day').add(1, 'day').add(hour, 'hours').add(min, 'minutes').toDate();
         }
         else if (modifiedTimeRegex.test(date)){
             let op, plus;
@@ -55,7 +60,7 @@ function parse(date){
             let [d, name] = date.match(namedTimeRegex);
             let time = sunTimes[name];
             if (!time)
-                throw `Unknown named time "${name}"`;
+                return undefined;
 
             return moment(time).toDate();
         }
