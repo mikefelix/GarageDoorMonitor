@@ -4,10 +4,11 @@ let {get, put} = require('request'),
     Q = require('q');
 
 module.exports = class Etek {
-    constructor(login, password, baseUrl, bulbs){
+    constructor(login, password, baseUrl, bulbs, meterBulbs){
         log(`Etek starting with ${login}/${password}/${baseUrl}`);
         this.client = new EtekClient(login, password, baseUrl);
         this.bulbs = bulbs;
+        this.meterBulbs = meterBulbs;
     }
 
     async getState(){
@@ -16,10 +17,15 @@ module.exports = class Etek {
         for (let i in devices){
             let device = devices[i];
             if (this.bulbs.indexOf(device.name) >= 0){
-                let meter = await this.client.getMeter(device.id);
+                let meter;
+                if (this.meterBulbs.indexOf(device.name) >= 0){
+                    //log(`get meter: ${device.id}`);
+                    meter = await this.client.getMeter(device.id);
+                }
+
                 result[device.name] = {
                     on: device.on,
-                    power: meter.power
+                    power: meter !== undefined ? meter.power : undefined
                 };
             }
         }
@@ -45,13 +51,13 @@ module.exports = class Etek {
     async toggle(name, timeout) {
         let device = await this.client.getDevice(name);
         if (device.on) {
-            log(`Toggling device ${device.name} off.`);
+            log(`Toggling device ${device.name} (${device.id}) off.`);
             let state = await this.client.turnOff(device.id);
             log(`Toggled off. New state is ${state.on}.`);
             return true;
         }
         else {
-            log(`Toggling device ${device.name} on.`);
+            log(`Toggling device ${device.name} (${device.id}) on.`);
             let state = await this.client.turnOn(device.id);
             log(`Toggled on. New state is ${state.on}.`);
             return true;
@@ -60,14 +66,14 @@ module.exports = class Etek {
 
     async on(name, timeout) {
         let device = await this.client.getDevice(name);
-        log(`Turning device ${device.name} on.`);
+        log(`Turning device ${device.name} (${device.id}) on.`);
         await this.client.turnOn(device.id);
         return true;
     }
 
     async off(name) {
         let device = await this.client.getDevice(name);
-        log(`Turning device ${device.name} off.`);
+        log(`Turning device ${device.name} (${device.id}) off.`);
         await this.client.turnOff(device.id);
         return true;
     }

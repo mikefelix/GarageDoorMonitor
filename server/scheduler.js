@@ -86,7 +86,7 @@ module.exports = class Scheduler {
 
         let device = this.devices[name];
         if (!device){
-            log(`No device found: ${name}.`);
+            //log(`No device found: ${name}.`);
             return;
         }
 

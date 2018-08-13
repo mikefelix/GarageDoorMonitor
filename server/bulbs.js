@@ -1,7 +1,9 @@
 let Hue = require('./hue.js'),
     Wemo = require('./wemo.js'),
     Etek = require('./etek.js'),
+    Q = require('q'),
     log = require('./log.js')('Bulbs'),
+    timeout = require('./timeout.js'),
     format = require('./format.js');
 
 let doAfterSeconds = (after, doThis) => {
@@ -11,7 +13,7 @@ let doAfterSeconds = (after, doThis) => {
 module.exports = class Bulbs {
     constructor(hueAddress, etekCreds){
         this.wemoBulbs = ['fan', 'vent', 'lamp'];
-        this.etekBulbs = ['coffee', 'piano', 'wine', 'office', 'stereo', 'aquarium'];
+        this.etekBulbs = ['coffee', 'piano', 'wine', 'stereo', 'aquarium'];
         this.hueBulbs = {
             garage: [1],
             breezeway: [2],
@@ -21,7 +23,7 @@ module.exports = class Bulbs {
 
         this.hue = new Hue(hueAddress, this.hueBulbs);
         this.wemo = new Wemo(this.wemoBulbs);
-        this.etek = new Etek(etekCreds[0], etekCreds[1], etekCreds[2], this.etekBulbs);
+        this.etek = new Etek(etekCreds[0], etekCreds[1], etekCreds[2], this.etekBulbs, ['piano']);
         this.history = {};
         this.overrides = {};
 
@@ -82,14 +84,21 @@ module.exports = class Bulbs {
     async getWemoState() { return await this.wemo.getState(); }
     async getEtekState() { return await this.etek.getState(); }
 
-    async getState(){
-        let hueState = await this.hue.getState();
-        let wemoState = await this.wemo.getState();
-        let etekState = await this.etek.getState();
-        let state = Object.assign(wemoState, hueState);
-        state = Object.assign(state, etekState);
-        state.history = this.history;
-        return state;
+    getState(){
+        let promiseTimer = timeout(15000, null);
+        let getHue = promiseTimer(this.hue.getState(), 'get hue state');
+        let getWemo = promiseTimer(this.wemo.getState(), 'get wemo state'); 
+        let getEtek = promiseTimer(this.etek.getState(), 'get etek state');
+
+        return Q.all([getHue, getWemo, getEtek]).then(states => {
+            let [hueState, wemoState, etekState] = states;
+            let state = {};
+            if (wemoState) state = Object.assign(state, wemoState);
+            if (hueState) state = Object.assign(state, hueState);
+            if (etekState) state = Object.assign(state, etekState);
+            state.history = this.history;
+            return state;
+        })
     }
 
     _hasMeter(name){

@@ -82,6 +82,7 @@ module.exports = class EtekCityClient {
                 }
             });
             
+            response.devices.map(device => log(`device ${device.deviceName} is ${device.id}`));
             return response.devices
                 .map(device => this._transformResponse(device));
         }
@@ -108,6 +109,7 @@ module.exports = class EtekCityClient {
                 }
             });
             
+            response.devices.map(device => log(`device ${name} is ${device.id}`));
             return response.devices
                 .filter(device => device.deviceName == name)
                 .map(device => this._transformResponse(device))[0];

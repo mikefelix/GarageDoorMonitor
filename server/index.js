@@ -1,5 +1,7 @@
 let http = require("http"),
     url = require("url"),
+    Q = require('q'),
+    timeout = require('./timeout.js'),
     fs = require("fs"),
     log = require("./log.js")("Main"),
     format = require("./format.js"),
@@ -11,6 +13,7 @@ let http = require("http"),
     Garage = require('./garage.js'),
     Scheduler = require('./scheduler.js'),
     Bulbs = require('./bulbs.js'),
+    Weather = require('./weather.js'),
     Thermostat = require('./thermostat.js'),
     Times = require('./sun_times.js');
 
@@ -36,6 +39,7 @@ const garage = new Garage(
         config.tesselUrl, 
         bulbs
 );
+const weather = new Weather(config.weatherUrl);
 const scheduler = new Scheduler(
     './schedules.json',
     getSystemState,
@@ -56,86 +60,49 @@ function turnOff(name, reason){
         bulbs.off.bind(bulbs)(name, reason);
 }
 
-/*function getDevice(name){
-    return name == 'furnace' || name == 'housefan' ?
-        therm.getState() :
-        bulbs.getBulb(name);
-}*/
+function getSystemState(){
+    let withTimeout = timeout(16000, null);
+    return Q.all([
+              withTimeout(therm.getState(), 'get therm state'), 
+              withTimeout(garage.getState(), 'get garage state'), 
+              withTimeout(bulbs.getState(), 'get bulb state'),
+              withTimeout(weather.get(), 'get weather')
+          ]).then(states => {
+        let [thermState, garageState, bulbState, weatherState] = states;
+        let state = {
+            away: thermState && thermState.away,
+            garage: garageState,
+            bulbs: bulbState,
+            schedules: scheduler.getSchedules(),
+            hvac: {
+                humidity: thermState.humidity,
+                temp: thermState.temp,
+                target: thermState.target,
+                state: thermState.state,
+                mode: thermState.mode,
+                on: thermState.state == 'heating' || thermState.state == 'cooling'
+            },
+            housefan: {
+                on: thermState.on,
+                offTime: thermState.fanOffTime
+            },
+            times: Times.get(true)
+        };
 
-/*function doOpen(uri){
-    if (Times.get().isNight){
-        bulbs.on('outside', 180, 'garage opened at night via app');
-    }
-    
-    return new Promise((resolve, reject) => {
-        try {
-            let time;
-            if (/open[0-9]+/.test(uri)){
-                time = uri.match(/open([0-9]+)/)[1];
-                log(`Garage open ${time} command received.`);
-            }
-            else {
-                time = 0;
-                log(`Garage open indefinitely command received.`);
-            }
-
-            tessel.post('open' + time);
-
-            setTimeout(async () => {
-                resolve(await tessel.get('state'));
-            }, 4000);
+        let temp = state.hvac.temp, target = state.hvac.target;
+        if (state.hvac.mode == 'cool'){
+            state.hvac.nearTarget = (!weatherState || weatherState.temp >= 76) &&
+                temp >= target && 
+                temp - target <= 2;
         }
-        catch (e){
-            log(`Error: ${e}`);
-            reject(e);
+        else if (state.hvac.mode == 'heat'){
+            state.hvac.nearTarget = temp <= target && target - temp <= 2;
         }
+
+        state.history = state.bulbs.history;
+        delete state.bulbs.history;
+        return state;
     });
-}
-
-function saveSnap(after){
-    if (after){
-        setTimeout(saveSnap, after * 1000);
-    }
-    else {
-        exec('/home/felix/bin/snapshot.sh', (error, stdout, stderr) => {
-            if (error) log("Failed to save snapshot. " + error);
-        });
-    }
-}
-*/
-
-async function getSystemState(){
-    let thermState = await therm.getState();
-
-    let state = {
-        away: thermState.away,
-        garage: await garage.getState(),
-        bulbs: await bulbs.getState(),
-        schedules: scheduler.getSchedules(),
-        hvac: {
-            humidity: thermState.humidity,
-            temp: thermState.temp,
-            target: thermState.target,
-            state: thermState.state,
-            mode: thermState.mode,
-            on: thermState.state == 'heating' || thermState.state == 'cooling'
-        },
-        housefan: {
-            on: thermState.on,
-            offTime: thermState.fanOffTime
-        },
-        times: Times.get(true)
-    };
-
-    let temp = state.hvac.temp, target = state.hvac.target;
-    if (state.hvac.mode == 'cool')
-        state.hvac.nearTarget = temp >= target && temp - target <= 2;
-    else if (state.hvac.mode == 'heat')
-        state.hvac.nearTarget = temp <= target && target - temp <= 2;
-
-    state.history = state.bulbs.history;
-    delete state.bulbs.history;
-    return state;
 }
 
 process.on('uncaughtException', function (err) {
@@ -150,8 +117,6 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 function verifyAuth(req){
-    log(`Verify auth for ${req.url}.`);
-    log(`${JSON.stringify(req.headers)}`);
     if (new RegExp('auth=' + config.authKey).test(req.url))
         return true;
 
@@ -198,12 +163,12 @@ const routes = {
     },
     'POST /close': async () => { // call from user
         log('Close command received.');
-        let msg = await tessel.post('close');
+        let msg = await garage.close();
         log('Tessel replies: ' + msg);
         return msg;
     },
     'POST /open([0-9]+)': async (request, time) => { // call from user
-        return await doOpen(time, request.url);
+        return await garage.open(time, request.url);
     },
     'GET /time': async () => { // call from user
         let times = Times.get(true);
@@ -277,13 +242,13 @@ const routes = {
             }
             else {
                 log('IoT button pressed again at night; opening garage.');
-                doOpen(0, request.url);
+                await garage.open(0, request.url);
                 recentLambda = false;
             }
         }
         else {
             log('IoT button pressed in daytime; opening garage.');
-            doOpen(request.url);
+            await garage.open(0, request.url);
         }
 
         return 202;
@@ -341,7 +306,7 @@ async function handleRequest(request, response){
                 let args = [request];
                 for (let i = 1; match.hasOwnProperty(i); i++){ 
                     args.push(match[i]);
-                    console.log(`${i} -> ${match[i]}`);
+                    //console.log(`${i} -> ${match[i]}`);
                 }
 
                 return await routes[route].apply(null, args);
@@ -357,222 +322,6 @@ async function handleRequest(request, response){
         return 500;
     }
 }
-
-/*
-async function handleRequestOld(request, response){
-    let req = request.method + ' ' + request.url.replace(/\?.*$/, '');
-    if (!req.match('^GET /state'))
-        log(`Received call at ${format(new Date())}: ${req}`);
-
-    try {
-        if (req == 'POST /warn1'){
-            return "OK";
-        }
-        if (req == 'POST /warn2'){
-            mail("Garage failed to close", "Garage didn't shut when I tried. Trying again.");
-            return "OK";
-        }
-        if (req == 'POST /warn3'){
-            mail("Garage is stuck open!", "Garage is open and I cannot shut it! I tried twice.");
-            return "OK";
-        }
-        if (req == 'POST /alive'){ // ping from tessel
-            log("Tessel reports that it is alive at " + new Date());
-            return "Yay!";
-        }
-        if (req.match(/^POST \/opened/)){ // call from tessel
-            let t = 'indefinitely';
-            if (req.match(/[0-9]+/))
-                t = req.match(/[0-9]+/)[0];
-
-            if (Times.get().isNight){
-                bulbs.on('outside', 180, 'garage opened at night');
-            }
-
-            log(`Tessel reports opened ${t} state at ${new Date()}`);
-            saveSnap(10);
-            return "opened alert received";
-        }
-        if (req == 'POST /closed'){ // call from tessel
-            log('Tessel reports closed state at ' + new Date());
-            saveSnap(0);
-            return "closed alert received";
-        }
-        if (req.match(/^POST \/close/)){ // call from user
-            if (verifyAuth(request)){
-                log('Close command received at ' + new Date());
-                return await garage.close();
-            }
-            else {
-                log('401 on close command at ' + new Date());
-                return 401;
-            }
-        }
-        if (req.match(/^POST \/open/)){ // call from user
-            if (verifyAuth(request)){
-                let [r, time] = request.url.match(/open([0-9]*)/);
-                return await garage.open(time);
-            }
-            else {
-                log('Unknown auth while attempting to open garage at ' + new Date() + ': ');
-                log(req.headers.Authorization);
-                return 401;
-            }
-        }
-        if (req == 'GET /time'){ // call from user
-            let times = Times.get(true);
-            for (let t in times){
-                if (t != 'isNight') times[t] = format(times[t]);
-            }
-
-            return times;
-        }
-        if (req == 'GET /state/garage'){
-            return await garage.getState();
-        }
-        if (req == 'GET /state/lights'){
-            return await bulbs.getState();
-        }
-        if (req == 'GET /state/lights/hue'){
-            return await bulbs.getHueState();
-        }
-        if (req == 'GET /state/lights/wemo'){
-            return await bulbs.getWemoState();
-        }
-        if (req == 'GET /state/lights/etek'){
-            return await bulbs.getEtekState();
-        }
-        if (req == 'GET /state/times'){
-            return Times.get(true);
-        }
-        if (req == 'GET /state/schedules'){
-            return scheduler.getSchedules();
-        }
-        if (req == 'GET /state/thermostat'){
-            return await therm.getState();
-        }
-        if (req == 'POST /state/thermostat'){
-            return await therm.moveTemp1();
-        }
-        if (req == 'GET /state'){
-            return await getSystemState();
-        }
-        if (req == 'DELETE /therm/away'){
-            if (!verifyAuth(request))
-                return 401;
-            
-            return await therm.set('away', false);
-        }
-        if (req == 'PUT /therm/away'){
-            if (!verifyAuth(request))
-                return 401;
-            
-            return await therm.set('away', true);
-        }
-        if (req.match(/^POST \/therm\/temp[0-9]+/)){ 
-            if (!verifyAuth(request))
-                return 401;
-            
-            let temp = req.url.match(/temp([0-9]+)/)[1];
-            return await therm.set('target_temperature_f', temp);
-        }
-        if (req.match(/^POST \/therm\/fan/)){ 
-            if (!verifyAuth(request))
-                return 401;
-            
-            let duration = !/fan[0-9]+/.test(req.url) ? 15 : req.url.match(/fan([0-9]+)/)[1];
-            return await therm.set('fan', duration);
-        }
-        if (req == 'POST /button'){ // Call from AWS Lambda
-            if (!verifyAuth(request))
-                return 401;
-
-            if (!recentLambda){
-                if (Times.get().isNight){
-                    log('IoT button pressed. It is night, so turning on bulbs.');
-                    bulbs.on('outside', 180, 'IoT button');
-                    recentLambda = true;
-                    setTimeout(() => recentLambda = false, 60000);
-                }
-                else {
-                    log('IoT button pressed. It is not night, so opening garage.');
-                    doOpen(request.url);
-                }
-            }
-            else {
-                log('IoT button pressed again, so turning on bulbs.');
-                doOpen(request.url);
-                recentLambda = false;
-            }
-
-            return 200;
-        }
-        if (req == 'GET /nestredirect'){
-            log(request.url);
-            return 200;
-        }
-        if (req == 'POST /nestaway'){ 
-            log("Nest reports away state at " + format(new Date()));
-            return "Got it.";
-        }
-        if (req == 'POST /nesthome'){ 
-            log("Nest reports people coming home at " + format(new Date()));
-            return "Got it.";
-        }
-        if (/(POST|GET) \/alight\/[a-z0-9]+/.test(req)){
-            let [u, meth, light] = req.match(/(POST|GET) \/alight\/([a-z0-9]+)/);
-            if (meth == 'GET')
-                return await bulbs.getBulb(light);
-            
-            if (meth == 'POST'){
-                scheduler.toggleOverride(light);
-                bulbs.toggleOverride(light);
-
-                let res = await bulbs.on(light, req);
-                return await bulbs.getBulb(light);
-            }
-
-            return 406;
-        }
-        if (/(POST|GET) \/unlight\/[a-z0-9]+/.test(req)){
-            let [u, meth, light] = req.match(/(POST|GET) \/unlight\/([a-z0-9]+)/);
-            if (meth == 'GET')
-                return await bulbs.getBulb(light);
-            
-            if (meth == 'POST'){
-                scheduler.toggleOverride(light);
-                bulbs.toggleOverride(light);
-                let res = await bulbs.off(light, req);
-                return await bulbs.getBulb(light);
-            }
-
-            return 406;
-        }
-        if (/(POST|GET) \/light\/[a-z0-9]+/.test(req)){
-            let [u, meth, light] = req.match(/(POST|GET) \/light\/([a-z0-9]+)/);
-            if (meth == 'GET')
-                return await bulbs.getBulb(light);
-            
-            if (meth == 'POST'){
-                scheduler.toggleOverride(light);
-                bulbs.toggleOverride(light);
-
-                let res = await bulbs.toggle(light, req);
-                return await bulbs.getBulb(light);
-            }
-
-            return 406;
-        }
-
-        log('Unknown URI: ' + req);
-        return 404;
-    } 
-    catch (e){
-        log(`Caught error during request ${req}: ${e}`);
-        return 500;
-    }
-}
-*/
 
 function reply(res, msg){
     let headers = {

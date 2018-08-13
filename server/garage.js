@@ -21,13 +21,14 @@ module.exports = class Garage {
     _call(action, time){
         if (Times.get().isNight){
             log(`Turning on outside lights during garage open.`);
-            bulbs.on('outside', 180, 'garage opened at night via app');
+            this.bulbs.on('outside', 180, 'garage opened at night via app');
         }
         
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             try {
                 log(`Opening garage ${time ? 'for ' + time + ' minutes' : 'indefinitely'}.`);
-                this.tessel.post(action + (time || ''));
+                let res = await this.tessel.post(action + (time || ''));
+                log(`Tessel replies: ${res}`);
 
                 setTimeout(async () => {
                     resolve(await this.tessel.get('state'));

@@ -1,5 +1,6 @@
 let axios = require("axios"),
     format = require('./format.js'),
+    Q = require('q'),
     log = require("./log.js")("Therm");
         
 module.exports = class Thermostat {
@@ -15,24 +16,33 @@ module.exports = class Thermostat {
         this.backoff = 1;
     }
 
-    async refreshState(){
+    refreshState(){
+        let getAway;
         if (this.refreshAwayCounter == 0){
-            let res = await this._callThermostat('away');
-            if (!res || !res.data){
-                log('No data found in away response.');
-                this.away = false;
-            } 
-            else {
-                let away = res.data.away != 'home';
-                if (away != this.away) log(`Set away to ${away} (${res.data.away}).`);
-                this.away = away;
-            }
+            getAway = this._callThermostat('away')
+                .then(res => {
+                    if (!res || !res.data){
+                        log('No data found in away response.');
+                        this.away = false;
+                    } 
+                    else {
+                        let away = res.data.away != 'home';
+                        if (away != this.away) log(`Set away to ${away} (${res.data.away}).`);
+                        this.away = away;
+                    }
+                })
+                .catch(err => log(`Error getting away state: ${err}`));
         }
         
         this.refreshAwayCounter = (this.refreshAwayCounter + 1) % this.refreshAwayEvery;
 
-        let res = await this._callThermostat();
-        this.state = this._trimThermResponse(res);
+        let getTherm = this._callThermostat()
+            .then(res => this.state = this._trimThermResponse(res))
+            .catch(err => log(`Error getting therm state: ${err}`));
+
+        return getAway ?
+            Q.all([getAway, getTherm]) :
+            getTherm;
     }
 
     async getState(){

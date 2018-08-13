@@ -1,31 +1,58 @@
 {
     "reset": "02:59",
+    "ranges": {
+        "day": {
+            "start": "sunrise",
+            "end": "sunset-30"
+        },
+        "night": {
+            "start": "sunset-30",
+            "end": "+03:00"
+        },
+        "earlymorn": {
+            "start": "03:00",
+            "end": "07:30"
+        }
+    }, 
     "schedules":{
         "coffee": {
             "on": "06:45",
             "off": "23:00"
         },
+        "piano": {
+            "off": "~60"
+        },
+        "driveway": {
+            "off": "1"
+        },
         "outside": {
-            "off": "2"
+            "off": "3"
+        },
+        "fan": {
+            "off": "90"
         },
         "lamp": {
-            "on": "sunset-30",
+            "on": "sunset-45",
             "off": "23:00"
         },
         "aquarium": {
             "on": "sunrise",
             "off": "22:00"
         },
-        "fan": {
-            "off": "120"
-        },
         "wine": {
             "on": "sunset",
             "off": "23:52" 
         },
+        "housefan": {
+            "on": "!earlymorn & !hvac.on & hvac.nearTarget"
+        },
+        "vent": {
+            "on": "housefan.on",
+            "off": "!housefan.on"
+        },
         "office": {
-            "on": "sunset-30",
-            "off": "3:00 | !192.168.0.112"
+            "on": "!day & 192.168.0.112",
+            "off": "day | !192.168.0.112"
         }
     }
 }

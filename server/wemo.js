@@ -1,5 +1,7 @@
 const WemoClient = require('wemo-client'),
       log = require('./log.js')('Wemo', false),
+      Q = require('q'),
+      timeout = require('./timeout.js'),
       wemo = new WemoClient();
 
 module.exports = class Wemo {
@@ -13,19 +15,30 @@ module.exports = class Wemo {
         });
     }
 
-    async getState(){
-        let totalState = {};
+    getState(){
+        let promiseTimer = timeout(10000, null);
+
+        let promises = [];
         for (let i = 0; i < this.bulbs.length; i++){
             let bulb = this.bulbs[i];
             try {
-                totalState[bulb] = await this.getBulbState(bulb);
+                log(`Get state for ${bulb}.`);
+                promises.push(promiseTimer(this.getBulbState(bulb), 'get bulb ' + bulb));
             }
             catch (e){
                 log(`Error getting wemo state for bulb ${bulb}`);
             }
         }
 
-        return totalState;
+        return Q.all(promises).then(states => {
+            let totalState = {};
+            for (let i = 0; i < this.bulbs.length; i++){
+                //log(`State for ${this.bulbs[i]} is ${states[i]}.`);
+                totalState[this.bulbs[i]] = states[i];
+            }
+
+            return totalState;
+        });
     }
 
     async getBulbState(bulb){
@@ -35,7 +48,7 @@ module.exports = class Wemo {
         return {on: state === '1' || state === 1 || state === true};
     }
 
-    async on(name, timeout){
+    async on(name){
         name = this._lowercase(name);
         return await this._changeState(name, true);
     }
@@ -45,7 +58,7 @@ module.exports = class Wemo {
         return await this._changeState(name, false);
     }
 
-    async toggle(name, timeout){ 
+    async toggle(name){ 
         name = this._lowercase(name);
         return await this._changeState(name);
     }

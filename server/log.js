@@ -15,17 +15,28 @@ producer.on('error', (err) => {
     console.log(`Error! ${err}`);
 });
 
-module.exports = function(segment, dateFormat) {
-    if (dateFormat === false)
+module.exports = function(segment, filterLevel){
+    if (filterLevel === false)
         return () => {};
 
-    if (!dateFormat) dateFormat = 'MM/DD h:mm:ssa';
+    if (!filterLevel)
+        filterLevel = 3;
 
-    return (msg) => {
-        if (typeof msg == 'object'){
-            console.dir(msg);
-            return;
+    let dateFormat = 'MM/DD h:mm:ssa';
+
+    return function() {
+        let msg, level;
+        if (arguments.length == 2 && typeof arguments[0] == 'number'){
+            level = arguments[0];
+            msg = arguments[1];
         }
+        else {
+            level = 1;
+            msg = arguments[0];
+        }
+
+        if (typeof msg == 'object')
+            msg = JSON.stringify(msg);
 
         let time = new Date();
         let prefix = `${segment} (${format(time, dateFormat)})`;
@@ -33,10 +44,11 @@ module.exports = function(segment, dateFormat) {
         for (let i = prefix.length; i < pad; i++) 
             padding += ' ';
 
-        console.log(`${prefix}:${padding}${msg}`);
+        if (filterLevel >= level)
+            console.log(`${prefix}:${padding}${msg}`);
 
         if (kafkaReady) {
-            let body = { segment, time, msg };
+            let body = { segment, level, time, msg };
             producer.send([{ topic: 'events', messages: JSON.stringify(body) }], (err, data) => {
                 if (err){
                     console.log(`Error: ${err}`);
