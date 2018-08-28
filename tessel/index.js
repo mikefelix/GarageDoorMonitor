@@ -15,7 +15,7 @@ var request = require('request');
 var http = require('http');
 var url = require('url');
 
-var ALERT_BASE_URL = "https://192.168.0.101/home/";
+var ALERT_BASE_URL = "https://mozzarelly.com/home/";
 
 var lastX = 0, lastY = 0, lastZ = 0;
 var currX = 0, currY = 0, currZ = 0;
