@@ -1,6 +1,7 @@
-let suncalc = require("suncalc");
-let moment = require('moment-timezone');
-let format = require('./format.js');
+let suncalc = require("suncalc"),
+    moment = require('moment-timezone'),
+    log = require('./log.js')("Times", 4),
+    format = require('./format.js');
 
 function getSunTimes(formatted){
     let tz = 'America/Denver'; // Was I using this?
@@ -34,8 +35,7 @@ function parse(date){
     if (!date) return undefined;
 
     if (typeof date != 'string'){
-        console.log(`Cannot parse date of type ${typeof date}.`);
-        console.dir(date);
+        log(1, `Cannot parse date of type ${typeof date}: ${JSON.stringify(date)}`);
         return undefined;
     } 
 

@@ -1,7 +1,7 @@
 let Tessel = require('./tessel.js'),
     exec = require('child_process').exec,
     format = require('./format.js'),
-    log = require('./log.js')('Garage'),
+    log = require('./log.js')('Garage', 4),
     Times = require('./sun_times.js');
 
 module.exports = class Garage {
@@ -35,7 +35,7 @@ module.exports = class Garage {
                 }, 6000);
             }
             catch (e){
-                log(`Error: ${e}`);
+                log(1, `Error: ${e}`);
                 reject(e);
             }
         });
@@ -47,7 +47,7 @@ module.exports = class Garage {
         }
         else {
             exec('/home/felix/bin/snapshot.sh', (error, stdout, stderr) => {
-                if (error) log("Failed to save snapshot. " + error);
+                if (error) log(1, "Failed to save snapshot. " + error);
             });
         }
     }
@@ -68,7 +68,7 @@ module.exports = class Garage {
             return tesselState;
         }
         catch (e) {
-            log('Error with Tessel state: ' + e);
+            log(1, 'Error with Tessel state: ' + e);
             return undefined;
         }
     }

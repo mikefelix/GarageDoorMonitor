@@ -2,7 +2,7 @@ let Hue = require('./hue.js'),
     Wemo = require('./wemo.js'),
     Etek = require('./etek.js'),
     Q = require('q'),
-    log = require('./log.js')('Bulbs'),
+    log = require('./log.js')('Bulbs', 2),
     timeout = require('./timeout.js'),
     format = require('./format.js');
 
@@ -13,7 +13,7 @@ let doAfterSeconds = (after, doThis) => {
 module.exports = class Bulbs {
     constructor(hueAddress, etekCreds){
         this.wemoBulbs = ['fan', 'vent', 'lamp'];
-        this.etekBulbs = ['coffee', 'piano', 'wine', 'stereo', 'aquarium'];
+        this.etekBulbs = ['coffee', 'piano', 'wine', 'stereo', 'aquarium', 'office'];
         this.hueBulbs = {
             garage: [1],
             breezeway: [2],
@@ -23,7 +23,7 @@ module.exports = class Bulbs {
 
         this.hue = new Hue(hueAddress, this.hueBulbs);
         this.wemo = new Wemo(this.wemoBulbs);
-        this.etek = new Etek(etekCreds[0], etekCreds[1], etekCreds[2], this.etekBulbs, ['piano']);
+        this.etek = new Etek(etekCreds[0], etekCreds[1], etekCreds[2], this.etekBulbs, ['piano', 'coffee']);
         this.history = {};
         this.overrides = {};
 
@@ -47,7 +47,7 @@ module.exports = class Bulbs {
     async getBulb(name){
         try {
             let handler = this._getHandler(name);
-            //log(`Get bulb ${name}`);
+            log(4, `Get bulb ${name}`);
             let state = await handler.getBulbState(name);
 
             let ret = {
@@ -60,7 +60,7 @@ module.exports = class Bulbs {
             return ret;
         }
         catch (e){
-            log(`Couldn't get state for bulb ${name}: ${e}`);
+            log(1, `Couldn't get state for bulb ${name}: ${e}`);
             return false;
         }
     }
@@ -90,7 +90,7 @@ module.exports = class Bulbs {
         let getWemo = promiseTimer(this.wemo.getState(), 'get wemo state'); 
         let getEtek = promiseTimer(this.etek.getState(), 'get etek state');
 
-        return Q.all([getHue, getWemo, getEtek]).then(states => {
+        let res = Q.all([getHue, getWemo, getEtek]).then(states => {
             let [hueState, wemoState, etekState] = states;
             let state = {};
             if (wemoState) state = Object.assign(state, wemoState);
@@ -98,7 +98,11 @@ module.exports = class Bulbs {
             if (etekState) state = Object.assign(state, etekState);
             state.history = this.history;
             return state;
-        })
+        });
+
+        log(4, 'Bulbs state:');
+        log(4, res);
+        return res;
     }
 
     _hasMeter(name){
@@ -186,22 +190,22 @@ module.exports = class Bulbs {
         if (expectedState != currentState.on){
             let tried = 0;
             do {
-                log(`Toggling ${bulbName} to ${expectedState} for ${source || 'unknown reason'}.`);
+                log(4, `Toggling ${bulbName} to ${expectedState} for ${source || 'unknown reason'}.`);
                 tried++;
                 await act.call(handler, bulbName);
-                //log(`Made call. Checking result.`);
+                log(4, `Made call. Checking result.`);
                 currentState = await handler.getBulbState(bulbName);
                 if (currentState.on != expectedState)
-                    log(`Retrying because new state is ${currentState.on} instead of ${expectedState}.`);
+                    log(3, `Retrying because new state is ${currentState.on} instead of ${expectedState}.`);
             }
             while (tried < 10 && expectedState != currentState.on);
 
             if (tried > 1){
-                log(`Toggling ${bulbName} to ${expectedState} took ${tried} tries!`);
+                log(3, `Toggling ${bulbName} to ${expectedState} took ${tried} tries!`);
             }
 
             if (tried >= 10) {
-                log(`Could not change ${bulbName} to ${currentState.on} after ${tried} tries.`);
+                log(1, `Could not change ${bulbName} to ${currentState.on} after ${tried} tries.`);
             }
         }
 

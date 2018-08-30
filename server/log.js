@@ -15,12 +15,12 @@ producer.on('error', (err) => {
     console.log(`Error! ${err}`);
 });
 
-module.exports = function(segment, filterLevel){
-    if (filterLevel === false)
+module.exports = function(segment, defaultLevel){
+    if (defaultLevel === false)
         return () => {};
 
-    if (!filterLevel)
-        filterLevel = 3;
+    if (!defaultLevel)
+        defaultLevel = 3;
 
     let dateFormat = 'MM/DD h:mm:ssa';
 
@@ -31,7 +31,7 @@ module.exports = function(segment, filterLevel){
             msg = arguments[1];
         }
         else {
-            level = 1;
+            level = defaultLevel;
             msg = arguments[0];
         }
 
@@ -44,10 +44,11 @@ module.exports = function(segment, filterLevel){
         for (let i = prefix.length; i < pad; i++) 
             padding += ' ';
 
+        let filterLevel = process.env.LOG_LEVEL || 3;
         if (filterLevel >= level)
             console.log(`${prefix}:${padding}${msg}`);
 
-        if (kafkaReady) {
+        if (kafkaReady && level <= 3) {
             let body = { segment, level, time, msg };
             producer.send([{ topic: 'events', messages: JSON.stringify(body) }], (err, data) => {
                 if (err){

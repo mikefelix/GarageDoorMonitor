@@ -1,5 +1,5 @@
 let axios = require("axios"),
-    log = require("./log.js")("Weather");
+    log = require("./log.js")("Weather", 4);
         
 module.exports = class Weather {
     constructor(weatherUrl){
@@ -12,7 +12,7 @@ module.exports = class Weather {
             return res;
         }
         catch (err){
-            log(`Error while calling weather URL: ${err}`);
+            log(1, `Error while calling weather URL: ${err}`);
             return undefined;
         }
     }

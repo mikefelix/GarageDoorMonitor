@@ -17,7 +17,7 @@
     "schedules":{
         "coffee": {
             "on": "06:45",
-            "off": "23:00"
+            "off": "12:00"
         },
         "piano": {
             "off": "~60"

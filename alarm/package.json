@@ -1,0 +1,11 @@
+{
+  "name": "alarm",
+  "version": "1.0.0",
+  "description": "Raspberry pi alarm clock",
+  "main": "index.js",
+  "scripts": {
+    "test": "test.js"
+  },
+  "author": "Mike Felix",
+  "license": "ISC"
+}

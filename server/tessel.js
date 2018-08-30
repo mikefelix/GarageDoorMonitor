@@ -1,4 +1,5 @@
-var request = require('request');
+var request = require('request'),
+    log = require('./log.js')('Tessel', 4);
 
 module.exports = class Tessel {
     constructor(address){
@@ -18,7 +19,7 @@ module.exports = class Tessel {
                 });
             }
             catch (e) {
-                console.log("Could not communicate with Tessel: " + e);
+                log(1, "Could not communicate with Tessel: " + e);
                 reject(e);
             }
         });
@@ -37,7 +38,7 @@ module.exports = class Tessel {
                 });
             }
             catch (e) {
-                console.log("Could not communicate with Tessel: " + e);
+                log(1, "Could not communicate with Tessel: " + e);
                 reject(e);
             }
         });

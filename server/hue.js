@@ -1,11 +1,11 @@
 let {get, put} = require('request'),
     format = require('./format.js'),
-    log = require('./log.js')('Hue', false),
+    log = require('./log.js')('Hue', 4),
     Q = require('q');
 
 module.exports = class Hue {
     constructor(address, bulbs){
-        log(`Hue starting at ${address}`);
+        log(4, `Hue starting at ${address}`);
         this.hueAddress = address;
         this.bulbs = bulbs;
     }
@@ -19,12 +19,12 @@ module.exports = class Hue {
             for (let j = 0; j < bulbs.length; j++){
                 try {
                     let state = await this.getBulbState(bulbs[j]);
-                    log(`state ${state}`);
+                    log(5, `state ${JSON.stringify(state)}`);
                     if (!totalState[name]) totalState[name] = {on: false};
                     totalState[name].on = (totalState[name].on || state.on);
                 }
                 catch (e){
-                    log(`Error getting hue state for bulb ${name}: ${e}`);
+                    log(1, `Error getting hue state for bulb ${name}: ${e}`);
                 }
             }
         }
@@ -41,24 +41,24 @@ module.exports = class Hue {
                 let num = bulbs[i];
                 if (!/[0-9+]/.test(num)) {
                     let arr = this._getBulbNumbers(num);
-                    if (!arr.length) log('ERROR: ' + (typeof arr) + ' is not an array');
+                    if (!arr.length) log(1, 'ERROR: ' + (typeof arr) + ' is not an array');
                     else num = arr[0];
                 }
 
                 if (!/[0-9+]/.test(num)) {
-                    log('ERROR: Cannot get bulb number for ' + num);
+                    log(1, 'ERROR: Cannot get bulb number for ' + num);
                 }
 
                 let body = await this._req(get, num);
-                //log('Body for ' + bulb + ': ' + body);
+                log(5, 'Body for ' + bulb + ': ' + body);
                 if (!body) throw 'Response is empty';
                 state |= /"on": ?true/.test(body);
             }
             catch (e){
-                log(`Error getting bulb state for ${bulb}: ${e}`);
+                log(1, `Error getting bulb state for ${bulb}: ${e}`);
                 return false;
             }
-        }
+        } 
 
         return {on: !!state};
     }
@@ -174,7 +174,7 @@ module.exports = class Hue {
                         reject(err);
                     }
                     else {
-                        log('Retrying', url);
+                        log(2, 'Retrying', url);
                         req(method, url, body, true)
                           .then(res2 => resolve(res2))
                           .catch(err2 => reject(err2));

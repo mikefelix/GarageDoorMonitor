@@ -1,5 +1,5 @@
 let FormData = require('form-data'),
-    log = require('./log.js')('Etek-client', false);
+    log = require('./log.js')('Etek-client', 5);
 
 module.exports = class EtekCityClient {
     constructor(username, password, baseUrl) {
@@ -51,7 +51,7 @@ module.exports = class EtekCityClient {
             return true;
         }
         catch (err){
-            log('Login error: ' + err);
+            log(1, 'Login error: ' + err);
             return false;
         }
     }
@@ -70,7 +70,7 @@ module.exports = class EtekCityClient {
             if (!this.token){
                 log('Logging in...');
                 if (!await this.logIn()){ 
-                    log('Login failed.');
+                    log(1, 'Login failed.');
                     return {};
                 }
             }
@@ -87,7 +87,7 @@ module.exports = class EtekCityClient {
                 .map(device => this._transformResponse(device));
         }
         catch (err){
-            log('getDevices error: ' + err);
+            log(1, 'getDevices error: ' + err);
             return {};
         }
     }
@@ -115,7 +115,7 @@ module.exports = class EtekCityClient {
                 .map(device => this._transformResponse(device))[0];
         }
         catch (err){
-            log('getDevice error: ' + err);
+            log(1, 'getDevice error: ' + err);
             return undefined;
         }
     }
@@ -148,7 +148,7 @@ module.exports = class EtekCityClient {
             return this._transformResponse(response);
         }
         catch (err){
-            log('turnOn error: ' + err);
+            log(1, 'turnOn error: ' + err);
         }
     }
 
@@ -180,7 +180,7 @@ module.exports = class EtekCityClient {
             return this._transformResponse(response);
         }
         catch (err){
-            log('turnOff error: ' + err);
+            log(1, 'turnOff error: ' + err);
         }
     }
 

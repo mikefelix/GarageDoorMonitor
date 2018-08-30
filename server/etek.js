@@ -1,11 +1,11 @@
 let {get, put} = require('request'),
     EtekClient = require('./etek-client.js'),
-    log = require('./log.js')('Etek', false),
+    log = require('./log.js')('Etek', 4),
     Q = require('q');
 
 module.exports = class Etek {
     constructor(login, password, baseUrl, bulbs, meterBulbs){
-        log(`Etek starting with ${login}/${password}/${baseUrl}`);
+        log(4, `Etek starting with ${login}/${password}/${baseUrl}`);
         this.client = new EtekClient(login, password, baseUrl);
         this.bulbs = bulbs;
         this.meterBulbs = meterBulbs;
@@ -19,7 +19,7 @@ module.exports = class Etek {
             if (this.bulbs.indexOf(device.name) >= 0){
                 let meter;
                 if (this.meterBulbs.indexOf(device.name) >= 0){
-                    //log(`get meter: ${device.id}`);
+                    log(`get meter: ${device.id}`);
                     meter = await this.client.getMeter(device.id);
                 }
 

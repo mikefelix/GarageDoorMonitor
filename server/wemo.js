@@ -1,5 +1,5 @@
 const WemoClient = require('wemo-client'),
-      log = require('./log.js')('Wemo', false),
+      log = require('./log.js')('Wemo', 4),
       Q = require('q'),
       timeout = require('./timeout.js'),
       wemo = new WemoClient();
@@ -9,7 +9,7 @@ module.exports = class Wemo {
         this.clients = {};
         this.bulbs = bulbs;
         wemo.discover(info => {
-            log('on startup, discovered ' + info.friendlyName);
+            log(1, 'on startup, discovered ' + info.friendlyName);
             let client = wemo.client(info);
             this.clients[info.friendlyName] = client;
         });
@@ -26,14 +26,14 @@ module.exports = class Wemo {
                 promises.push(promiseTimer(this.getBulbState(bulb), 'get bulb ' + bulb));
             }
             catch (e){
-                log(`Error getting wemo state for bulb ${bulb}`);
+                log(1, `Error getting wemo state for bulb ${bulb}`);
             }
         }
 
         return Q.all(promises).then(states => {
             let totalState = {};
             for (let i = 0; i < this.bulbs.length; i++){
-                //log(`State for ${this.bulbs[i]} is ${states[i]}.`);
+                log(`State for ${this.bulbs[i]} is ${states[i]}.`);
                 totalState[this.bulbs[i]] = states[i];
             }
 
@@ -67,7 +67,7 @@ module.exports = class Wemo {
         log(`Change ${name} to ${newState}${retrying ? ' (retrying)' : ''}.`);
         try {
             let client = await this._getClient(name);
-            //log('Client found for ' + name + ': '); console.dir(client);
+            log('Client found for ' + name + ': '); 
             return await this._setClientState(client, newState);
         }
         catch (err) {
@@ -82,7 +82,7 @@ module.exports = class Wemo {
     }
 
     _getClient(name, forceDiscover){
-        //log(`wemo: get client for ${name}`);
+        log(`wemo: get client for ${name}`);
         return new Promise((resolve, reject) => {
             name = name.substring(0, 1).toUpperCase() + name.substring(1);
             //forceDiscover = true; // TODO: needed?
@@ -98,7 +98,7 @@ module.exports = class Wemo {
                     wemo.discover(deviceInfo => {
                         try {
                             if (deviceInfo){
-                                log(`Wemo device ${deviceInfo.friendlyName} is at ${deviceInfo.host}:${deviceInfo.port}`);
+                                log(5, `Wemo device ${deviceInfo.friendlyName} is at ${deviceInfo.host}:${deviceInfo.port}`);
 
                                 if (deviceInfo.friendlyName == name){
                                     this.clients[name] = wemo.client(deviceInfo);
@@ -109,14 +109,14 @@ module.exports = class Wemo {
                                 log('No device info?');
                         }
                         catch (e){
-                            log("Can't discover devices: " + e);
+                            log(1, "Can't discover devices: " + e);
                             reject(e);
                         }
                     });
                 }
                 catch (e) {
-                    log(`Failed to discover Wemo devices.`);
-                    log(e);
+                    log(1, `Failed to discover Wemo devices.`);
+                    log(1, e);
                 }
             }
         });
@@ -144,7 +144,7 @@ module.exports = class Wemo {
                 client.getBinaryState((err, state) => {
                     state = state === 1 || state === '1' || state === true;
                     if (err) {
-                        log("Error getting wemo state: " + err);
+                        log(1, "Error getting wemo state: " + err);
                         reject(err);
                     }
                     else if (newState === undefined){
@@ -165,7 +165,7 @@ module.exports = class Wemo {
                 });
             }
             catch (e) {
-                log("Can't communicate with Wemo: " + e);
+                log(1, "Can't communicate with Wemo: " + e);
                 reject(e);
             }
         });

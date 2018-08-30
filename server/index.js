@@ -3,7 +3,7 @@ let http = require("http"),
     Q = require('q'),
     timeout = require('./timeout.js'),
     fs = require("fs"),
-    log = require("./log.js")("Main"),
+    log = require("./log.js")("Main", 1),
     format = require("./format.js"),
     path = require("path"),
     request = require('request'),
@@ -18,14 +18,16 @@ let http = require("http"),
     Times = require('./sun_times.js');
 
 const config = JSON.parse(fs.readFileSync('./config.json'));
-for (let key of ["port", "email", "tesselUrl", "authKey", "hueIp", "hueKey", "pushoverKey", "etekBaseUrl", "etekUser", "etekPass", "thermostatId", "structureId", "nestToken"]){
+for (let key of ["port", "email", "tesselUrl", "authKey", "hueIp", "hueKey", "pushoverKey", "etekBaseUrl", "etekUser", "etekPass", "thermostatId", "structureId", "nestToken", "weatherUrl"]){
     if (!config[key]){
         log('Key required in config: ' + key);
         process.exit(1);
     }
 }
 
+let logLevel = process.env.LOG_LEVEL || 3;
 let recentLambda = false;
+
 const bulbs = new Bulbs(
     `http://${config.hueIp}/api/${config.hueKey}/lights`, 
     [config.etekUser, config.etekPass, config.etekBaseUrl]
@@ -48,12 +50,14 @@ const scheduler = new Scheduler(
 );
 
 function turnOn(name, reason){
+    log(4, `turnOn ${name} because ${reason}`);
     return name == 'housefan' ?
         therm.set.bind(therm)('fan', 30) :
         bulbs.on.bind(bulbs)(name, reason);
 }
 
 function turnOff(name, reason){
+    log(4, `turnOff ${name} because ${reason}`);
     return name == 'housefan' ?
         //therm.set.bind(therm)('fan', 0) :
         () => {} :
@@ -106,8 +110,8 @@ function getSystemState(){
 }
 
 process.on('uncaughtException', function (err) {
-    log(' uncaughtException: ' + err.message);
-    console.log(err.stack);
+    log(1, ' uncaughtException: ' + err.message);
+    log(1, err.stack);
     process.exit(1);
 });
 
@@ -117,9 +121,13 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 function verifyAuth(req){
+    log(4, `verify ${req.url}`);
+    if (req.method == 'GET')
+        return true;
+    if (req.method == 'POST' && /^\/(opened|closed)/.test(req.url))
+        return true;
     if (new RegExp('auth=' + config.authKey).test(req.url))
         return true;
-
     if (req.headers.authorization == config.authKey)
         return true;
 
@@ -127,10 +135,6 @@ function verifyAuth(req){
 }
 
 const routes = {
-    'POST /test(.)(.)': async (request, a, b) => {
-        console.log(`args: ${a}, ${b}`);
-        return 200;
-    },
     'POST /warn1': async () => {
         return 200;
     }, 
@@ -146,19 +150,19 @@ const routes = {
         log("Tessel reports that it is alive.");
         return 200;
     },
-    'POST /opened([0-9+])?': async (request, t) => { // call from tessel
+    'POST /opened([0-9]+)?': async (request, t) => { // call from tessel
         if (!t) t = 'indefinitely';
 
         if (Times.get().isNight)
             bulbs.on('outside', 180, 'garage opened at night');
 
         log(`Tessel reports opened ${t} state.`);
-        saveSnap(10);
+        //saveSnap(10);
         return "opened alert received";
     },
     'POST /closed': async () => { // call from tessel
         log('Tessel reports closed state.');
-        saveSnap(0);
+        //saveSnap(0);
         return "closed alert received";
     },
     'POST /close': async () => { // call from user
@@ -167,7 +171,7 @@ const routes = {
         log('Tessel replies: ' + msg);
         return msg;
     },
-    'POST /open([0-9]+)': async (request, time) => { // call from user
+    'POST /open([0-9]*)': async (request, time) => { // call from user
         return await garage.open(time, request.url);
     },
     'GET /time': async () => { // call from user
@@ -258,15 +262,14 @@ const routes = {
         return 202;
     },
     'POST /nestaway': async () => {
-        log("Nest reports away state at " + format(new Date()));
+        log("Nest reports away state.");
         return "Got it.";
     },
     'POST /nesthome': async () => {
-        log("Nest reports people coming home at " + format(new Date()));
+        log("Nest reports people coming home.");
         return "Got it.";
     },
     '(POST|GET) /(light|alight|unlight)/([a-z0-9_]+)': async (request, meth, action, light) => {
-        log(`${meth} ${action} ${light} ${request.url}`);
         if (meth == 'GET')
             return await bulbs.getBulb(light);
 
@@ -298,7 +301,7 @@ async function handleRequest(request, response){
         for (let route in routes){
             let match;
             if (match = req.match(new RegExp(route))){
-                if (!req.match(/^GET/) && !verifyAuth(request)){
+                if (!verifyAuth(request)){
                     log('Unauthorized request for ' + req);
                     return 401;
                 }
@@ -306,7 +309,6 @@ async function handleRequest(request, response){
                 let args = [request];
                 for (let i = 1; match.hasOwnProperty(i); i++){ 
                     args.push(match[i]);
-                    //console.log(`${i} -> ${match[i]}`);
                 }
 
                 return await routes[route].apply(null, args);
@@ -331,12 +333,15 @@ function reply(res, msg){
 
     if (msg === true){
         res.writeHead(200, headers);
+        res.end();
     }
     else if (msg === false){
         res.writeHead(500, headers);
+        res.end();
     }
     else if (typeof msg == 'number'){
         res.writeHead(msg, headers);
+        res.end();
     }
     else if (typeof msg == 'object'){
         res.writeHead(200, headers);
@@ -346,8 +351,6 @@ function reply(res, msg){
         res.writeHead(200, headers);
         res.end(JSON.stringify({result:msg}));
     }
-
-    res.end();
 }
 
 function proxy(response, options){
@@ -376,6 +379,7 @@ http.createServer((request, response) => {
     else {
         handleRequest(request, response)
         .then(result => {
+            log(4, `result is ${result}`);
             reply(response, result);
         })
         .catch(err => {
@@ -386,7 +390,7 @@ http.createServer((request, response) => {
 }).listen(config.port);
 
 let times = Times.get(true);
-log(`Process started on ${config.port}. Times for today:`);
+log(`Process started on ${config.port} at log level ${logLevel}. Times for today:`);
 log('Current time is: ' + times.current);
 log('Sunrise time is: ' + times.sunrise);
 log('Sunset time is: ' + times.sunset);

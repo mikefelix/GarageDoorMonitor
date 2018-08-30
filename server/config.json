@@ -1,0 +1,17 @@
+{
+    "port": "8888",
+    "email": "michael.felix@gmail.com",
+    "tesselUrl": "http://192.168.0.102:8888",
+    "authKey": "Gd9kkwtTv7BW2p0Fg", 
+    "hueIp": "192.168.0.115", 
+    "hueKey": "KgVPpqOz3wdHb5ILmgwHdG5SA35WzbTEDKYrsxz0", 
+    "pushoverKey": "a71jop3mry1qf2796c6z2bqs466bmh", 
+    "etekBaseUrl": "https://server1.vesync.com:4007",
+    "etekUser": "michael.felix@gmail.com", 
+    "etekPass": "4vpvkTGX41Ay5VK", 
+    "thermostatId": "mk7T26FVdf-iMPMFpEr7yGrKJ8PjBoEG", 
+    "structureId": "S11opO3qo1rP0xJvugTkzfpVEHEqrgQrCU6EBWM3jd02uGGZYfEpUw", 
+    "nestToken": "c.E7APpbqdmTJaPRI0ZnojtdIUFOjMOQyqWjV0WBmIuOBTASWrXg7AlFjAmVKxQ2wUasO0hq9AbyhZ3bbPf22QakzvNLMypjuO5QzFEwqrDjqMtiiNgE7oMUIWAJjkQoBYl83TYt7l0FPNUwmP",
+    "weatherUrl": "https://mozzarelly.com/weather/current",
+    "logLevel": 2
+}
