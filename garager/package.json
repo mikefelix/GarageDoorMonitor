@@ -1,0 +1,20 @@
+{
+  "name": "com.mozzarelly.garager",
+  "version": "1.0.0",
+  "displayName": "Garage",
+  "cordova": {
+    "platforms": [
+      "android",
+      "www",
+      "browser"
+    ],
+    "plugins": {
+      "cordova-plugin-whitelist": {}
+    }
+  },
+  "dependencies": {
+    "cordova-android": "^7.0.0",
+    "cordova-browser": "^5.0.3",
+    "cordova-plugin-whitelist": "1"
+  }
+}

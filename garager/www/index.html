@@ -57,9 +57,11 @@
     function refresh(){
         $('.main').hide();
         $('.refresh').html('Refreshing...');
-        $.get("http://mozzarelly.com/garage/state", function( data ) {
+        $.get("https://mozzarelly.com/home/state", function( data ) {
             //data = '{"is_open":true,"last_open_time":"2016-08-27T17:36:34.654Z","last_close_time":"2016-08-27T18:48:48.534Z","next_close_time":"2016-08-27T18:59:59.743Z","close_attempts":0,"current_time":"2016-08-27T18:57:57.743Z"}';
-            var state = JSON.parse(data);
+            console.log('data is ' + typeof data);
+            console.dir(data);
+            var state = data; //JSON.parse(data);
             if (state.last_open_time){
                 var date = formatTime(state.last_open_time);
                 $('.lastopen').html('Last opened: ' + date);
@@ -142,7 +144,7 @@
 
     function toggle(light){
         lightText(light);
-        $.get("http://mozzarelly.com/garage/light_" + light + "?auth=" + auth, function(){
+        $.get("https://mozzarelly.com/home/light_" + light + "?auth=" + auth, function(){
             //setTimeout(refresh, 15000);
             refresh();
         });
@@ -158,7 +160,7 @@
         else
             t = '0';
 
-        $.get("http://mozzarelly.com/garage/open" + t + "?auth=" + auth, function(){
+        $.get("https://mozzarelly.com/home/open" + t + "?auth=" + auth, function(){
             setTimeout(refresh, 15000);
         });
     }
@@ -171,7 +173,7 @@
 
         $('.time').html('Closing...');
         $('.time').show();
-        $.get("http://mozzarelly.com/garage/close?auth=" + auth, function(){
+        $.get("https://mozzarelly.com/home/close?auth=" + auth, function(){
             setTimeout(refresh, 15000);
         });
     }
