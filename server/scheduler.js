@@ -13,6 +13,9 @@ module.exports = class Scheduler {
             let state = await getState();
             state.bulbs.housefan = state.housefan;
             state.bulbs.hvac = state.hvac;
+            state.bulbs.alarm = state.alarm;
+            state.bulbs.owner = {home: !state.away};
+            log(4, state);
             return state.bulbs;
         };
         this._turnOn = turnOn;
@@ -56,11 +59,6 @@ module.exports = class Scheduler {
         for (let schedule in this.schedules){
             await this.check(schedule);
         }
-    }
-
-    setSpec(spec, trigger){
-        log(`Set ${spec} to ${trigger}`);
-        this.schedules[spec] = this.parseTrigger(trigger);
     }
 
     currentTimeIs(time){
@@ -173,7 +171,7 @@ module.exports = class Scheduler {
     }
 
     specifiesCountdownTrigger(trigger){
-        return /^[0-9]+$/.test(trigger);
+        return /^\/[0-9]+$/.test(trigger);
     }
 
     specifiesPowerCountdownTrigger(trigger){
@@ -185,35 +183,35 @@ module.exports = class Scheduler {
     }
 
     createPowerCountdownTrigger(schedule, spec, trigger, threshold){
-        let self = this;
         let key = `${schedule}_${spec}`;
+        log(4, `Create power countdown trigger for ${schedule}/${spec}/${trigger}/${threshold}.`);
         return async (device) => {
             if (spec == 'off'){
                 log(4, `${schedule} device.power = ${device.power}`);
                 let time = trigger.replace(/~/, '');
                 if (device.power > threshold){
-                    if (self.timers[key] === undefined){
+                    if (this.timers[key] === undefined){
                         // Device is on but there's no timer; create it.
-                        log(4, `Create timer for ${schedule} for ${time} minutes because ${'device.power = ' + device.power}.`);
-                        self.timers[key] = +time;
+                        log(4, `Create timer for ${schedule} for ${time} minutes because device.power = ${device.power}.`);
+                        this.timers[key] = +time;
                     }
 
-                    if (self.timers[key] <= 0){
+                    if (this.timers[key] <= 0){
                         // Device is on and timer has reached zero; turn it off.
                         log(`Timer has reached zero. Time for shutoff!`);
-                        delete self.timers[key];
+                        delete this.timers[key];
                         return true;
                     }
                     
                     // Device is on and there's a timer; decrement it.
-                    log(5, `${self.timers[key]} minutes left until shutoff.`);
-                    self.timers[key] = self.timers[key] - 1;
+                    log(5, `${this.timers[key]} minutes left until shutoff.`);
+                    this.timers[key] = this.timers[key] - 1;
                 }
                 else {
-                    if (self.timers[key]){
+                    if (this.timers[key]){
                         // Device is off and there's still a timer; clear it.
                         log(4, `Removing unexpired timer for ${schedule}.`);
-                        delete self.timers[key];
+                        delete this.timers[key];
                     }
                     else {
                         // Device is off.
@@ -226,36 +224,34 @@ module.exports = class Scheduler {
     }
 
     createCountdownTrigger(schedule, spec, trigger){
-        let self = this;
         let key = `${schedule}_${spec}`;
         return async (device) => {
             if (spec == 'off'){
-                log(4, `${schedule} device.power = ${device.power}`);
-                let time = trigger.replace(/~/, '');
-                let enact = /^~/.test(trigger) ? device.power > 9 : device.on;
-                if (enact){
-                    if (self.timers[key] === undefined){
+                //log(4, `${schedule} device.power = ${device.power}`);
+                let time = trigger.replace(/\//, '');
+                if (device.on){
+                    if (this.timers[key] === undefined){
                         // Device is on but there's no timer; create it.
-                        log(`Create timer for ${schedule} for ${time} minutes because ${/^~/.test(trigger) ? 'device.power = ' + device.power : 'device is on'}`);
-                        self.timers[key] = +time;
+                        log(`Create timer for ${schedule} for ${time} minutes because device is on.`);
+                        this.timers[key] = +time;
                     }
 
-                    if (self.timers[key] <= 0){
+                    if (this.timers[key] <= 0){
                         // Device is on and timer has reached zero; turn it off.
                         log(`Timer has reached zero. Time for shutoff!`);
-                        delete self.timers[key];
+                        delete this.timers[key];
                         return true;
                     }
 
                     // Device is on and there's a timer; decrement it.
-                    log(5, `${self.timers[key]} minutes left until shutoff.`);
-                    self.timers[key] = self.timers[key] - 1;
+                    log(5, `${this.timers[key]} minutes left until shutoff.`);
+                    this.timers[key] = this.timers[key] - 1;
                 }
                 else {
-                    if (self.timers[key]){
+                    if (this.timers[key]){
                         // Device is off and there's still a timer; clear it.
                         log(4, `Removing unexpired timer for ${schedule}.`);
-                        delete self.timers[key];
+                        delete this.timers[key];
                     }
                     else {
                         // Device is off.
@@ -273,7 +269,7 @@ module.exports = class Scheduler {
         first = first.trim();
         second = second.trim();
 
-        log(4, `${schedule} will turn ${spec} when ${first} ${op} ${second}.`);
+        log(3, `${schedule} will turn ${spec} when ${first} ${op} ${second}.`);
         return async (device) => {
             let trigger1 = this.parseTrigger(schedule, spec, first);
             let trigger2 = this.parseTrigger(schedule, spec, second);
@@ -295,12 +291,15 @@ module.exports = class Scheduler {
                 res = set1 >= set2;
 
             log(5, `${first} (${set1}) ${op} ${second} (${set2})`);
+            if (res)
+                log(3, `Comparison passed: ${first} (${set1}) ${op} ${second} (${set2})`);
+
             return res;
         }
     }
 
     parseTrigger(schedule, spec, trigger){
-        let self = this;
+        log(3, `Parse trigger ${schedule}/${spec}/${trigger}.`);
         if (this.specifiesPowerCountdownTrigger(trigger)) 
             return this.createPowerCountdownTrigger(schedule, spec, trigger, 7);
 
@@ -315,7 +314,7 @@ module.exports = class Scheduler {
             let trigger1 = this.parseTrigger(schedule, spec, first.trim());
             let trigger2 = this.parseTrigger(schedule, spec, second.trim());
             return async (device) => {
-                log(4, `run trigger ${trigger}`);
+                log(5, `run trigger ${trigger}`);
                 let cond1 = await trigger1(device);
                 if (cond1){
                     log(4, `|: Condition 1 (${first}) is ${cond1}`);
@@ -393,19 +392,40 @@ module.exports = class Scheduler {
             }
         }
         
-        if (/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/.test(trigger)){
-            let [m, obj, key] = trigger.match(/^([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)$/);
+        // e.g. coffee.power
+        if (/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+([+-][0-9]+)?$/.test(trigger)){
+            let [m, obj, key, adj] = trigger.match(/^([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)([+-][0-9]+)?$/);
+            log(3, `${schedule} will turn ${spec} at ${trigger}`);
             return async (device) => {
-                let res = self.devices[obj.trim()];
-                if (!res) {
+                let dev = this.devices[obj.trim()];
+                if (!dev) {
                     log(1, `Unknown device ${obj.trim()}.`);
                     return undefined;
                 }
 
-                let val = res[key.trim()]; 
+                let val = dev[key.trim()]; 
+                if (val === undefined){
+                    log(1, `Property ${key} not found on ${obj}. ${JSON.stringify(dev)}`);
+                    return false;
+                }
 
                 log(4, `${obj}.${key} = ${val}`);
-                return val;
+
+                // TODO: this is hacky
+                let maybeTime = Times.parse(val + (adj || ''));
+                if (maybeTime){
+                    log(4, `Treating property trigger ${trigger} as time ${maybeTime}.`);
+                    return this.currentTimeIs(maybeTime);
+                }
+                else {
+                    if (adj){
+                        let adjNum = +adj.replace(/[^0-9]/g, '');
+                        if (adj.startsWith('-')) adjNum = -adjNum;
+                        val = val + adjNum;
+                    }
+
+                    return val;
+                }
             }
         }
 
@@ -418,19 +438,26 @@ module.exports = class Scheduler {
             }
         }
 
+        // e.g. 192.168.0.110
         if (/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(trigger)){
             return async (device) => {
-                let res = await self._hostIsUp(trigger);
+                let res = await this._hostIsUp(trigger);
                 log(4, 'ping trigger gave ' + res);
                 return res;
             }
         }
 
-        if (self.ranges && self.ranges.hasOwnProperty(trigger)){
+        if (/^'.*'$/.test(trigger)){
+            return async (device) => {
+                return this.values[trigger.replace(/'/g, '')];
+            }
+        }
+
+        if (this.ranges && this.ranges.hasOwnProperty(trigger)){
             return async (device) => {
                 let time = moment();
-                let start = Times.parse(self.ranges[trigger].start);
-                let end = Times.parse(self.ranges[trigger].end);
+                let start = Times.parse(this.ranges[trigger].start);
+                let end = Times.parse(this.ranges[trigger].end);
                 log(4, `isAfter(${start}) ${time.isAfter(start)}`);
                 log(4, `isBefore(${end}) ${time.isBefore(end)}`);
                 return time.isAfter(start) && time.isBefore(end);
@@ -440,9 +467,9 @@ module.exports = class Scheduler {
         log(4, `Parsing ${schedule} as time.`);
         let time = Times.parse(trigger);
         if (time) {
-            log(`${schedule} will turn ${spec} today at ${format(time)}.`);
+            log(3, `${schedule} will turn ${spec} today at ${format(time)}.`);
             return async () => {
-                return self.currentTimeIs(time);
+                return this.currentTimeIs(time);
             }
         }
 
@@ -451,17 +478,22 @@ module.exports = class Scheduler {
         if (trigger == 'temp_at_target'){
             log(`${schedule} will turn ${spec} when therm is at target.`);
             return async (device) => {
-                let therm = await self._getDevice('therm');
+                let therm = await this._getDevice('therm');
                 return therm && !therm.on && therm.temp == therm.target;
             }
         }
         */
 
         if (/^[A-Za-z0-9_]+$/.test(trigger)){
-            log(`${schedule} will turn ${spec} with ${trigger}.`);
+            log(3, `${schedule} will turn ${spec} with ${trigger}.`);
             return async (device) => {
-                let res = self.devices[trigger];
-                return res ? res.on : undefined;
+                if (/^[0-9]+$/.test(trigger)){
+                    return +trigger;
+                }
+                else {
+                    let res = this.devices[trigger];
+                    return res ? res.on : undefined;
+                }
             }
         }
 
@@ -470,21 +502,6 @@ module.exports = class Scheduler {
 
     _readFile(){
         log(`Read file.`);
-        let self = this;
-        function getActor(trigger, action, schedule, spec){
-            return async (device) => {
-                if (!self.schedules[schedule].overridden){
-                    let res = await trigger(device);
-                    if (res){ 
-                        log(`Turn ${schedule} ${spec}.`);
-                        await action(schedule, `schedule (${spec})`);
-                        delete self.timers[`${schedule}_${spec}`];
-                    }
-                }
-                else log(4, `Skipping check for ${schedule} because it has been overridden.`);
-            };
-        }
-
         let file = JSON.parse(fs.readFileSync(this.file));
         this.reset = Times.parse(file.reset);
         this.schedules = file.schedules;
@@ -495,23 +512,37 @@ module.exports = class Scheduler {
         for (let schedule in this.schedules){
             this.actors[schedule] = {};
             for (let spec in this.schedules[schedule]){
-                let action, trigger = this.parseTrigger(schedule, spec, this.schedules[schedule][spec]);
-                if (spec == 'on'){
-                    action = async () => {
-                        await this._turnOn(schedule, `schedule (${spec})`);
-                        this.devices[schedule].on = true;
-                    }
-                }
-                else if (spec == 'off'){
-                    action = async () => {
-                        await this._turnOff(schedule, `schedule (${spec})`);
-                        this.devices[schedule].on = false;
-                    }
-                }
-
-                this.actors[schedule][spec] = getActor(trigger, action, schedule, spec);
+                this.setTrigger(schedule, spec, this.schedules[schedule][spec]);
             }
         }
+    }
+
+    setTrigger(schedule, spec, trigger){
+        log(4, `Set ${spec} to ${trigger}`);
+        let action, triggerFunc = this.parseTrigger(schedule, spec, trigger);
+        if (spec == 'on'){
+            action = async () => {
+                await this._turnOn(schedule, `schedule (${spec})`);
+                this.devices[schedule].on = true;
+            }
+        }
+        else if (spec == 'off'){
+            action = async () => {
+                await this._turnOff(schedule, `schedule (${spec})`);
+                this.devices[schedule].on = false;
+            }
+        }
+
+        this.actors[schedule][spec] = async (device) => {
+            if (!this.schedules[schedule].overridden){
+                if (await triggerFunc(device)){ 
+                    log(`Turn ${schedule} ${spec}.`);
+                    await action(schedule, `schedule (${spec})`);
+                    delete this.timers[`${schedule}_${spec}`];
+                }
+            }
+            else log(4, `Skipping check for ${schedule} because it has been overridden.`);
+        };
     }
 
     async _hostIsUp(host) {

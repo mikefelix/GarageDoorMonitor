@@ -14,6 +14,9 @@ const routes = {
     'POST /stop': () => {
         playing = false;
         return 200;
+    },
+    'GET /': () => {
+        return {on: playing};
     }
 }
 

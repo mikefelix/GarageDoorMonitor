@@ -16,20 +16,20 @@
     }, 
     "schedules":{
         "coffee": {
-            "on": "06:45",
-            "off": "12:00"
+            "on": "alarm.time-10",
+            "off": "/30"
         },
         "piano": {
             "off": "~60"
         },
         "driveway": {
-            "off": "1"
+            "off": "/1"
         },
         "outside": {
-            "off": "3"
+            "off": "/3"
         },
         "fan": {
-            "off": "90"
+            "off": "/60"
         },
         "lamp": {
             "on": "sunset-45",
@@ -53,6 +53,15 @@
         "office": {
             "on": "!day & 192.168.0.112",
             "off": "day | !192.168.0.112"
+        },
+        "alarm": {
+            "on": "alarm.time",
+            "off": "coffee.power > 500"
+        },
+        "bed": {
+            "on": "22:30 & owner.home & weather.temp < 65",
+            "off": "alarm.time | 10:00",
+            "cycle": "/540"
         }
     }
 }
