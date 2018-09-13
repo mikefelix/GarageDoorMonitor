@@ -1,7 +1,6 @@
 const http = require("http"),
       path = require("path"),
-      util = requre('util'),
-      exec = util.promisify(require('child_process').exec),
+      exec = require('child_process').execSync,
       request = require('request');
 
 let playing = false;
@@ -17,44 +16,42 @@ const routes = {
     }
 }
 
-async function play(){
-    try {
+function play(){
         if (playing){
-            let res = await exec('omxplayer -o local alarm.mp3');
-            console.log('Played alarm at ' + new Date());
+            let res = exec('omxplayer -o local alarm.mp3');
+            console.log(`Played alarm at ${new Date()}.`);
         }
 
         setTimeout(play, 1000);
-    }
-    catch (err){
-        console.log('Failed. ' + err);
-        process.exit(1);
-    }
 };
 
-async function handleRequest(request, response){
+function handleRequest(request, response){
     let req = request.method + ' ' + request.url.replace(/\?.*$/, '');
 
-    try {
-        for (let route in routes){
-            let match;
-            if (match = req.match(new RegExp(route))){
-                let args = [request];
-                for (let i = 1; match.hasOwnProperty(i); i++){ 
-                    args.push(match[i]);
-                }
+    return new Promise((resolve, reject) => {
+	    try {
+		for (let route in routes){
+		    let match;
+		    if (match = req.match(new RegExp(route))){
+			let args = [request];
+			for (let i = 1; match.hasOwnProperty(i); i++){ 
+			    args.push(match[i]);
+			}
 
-                return await routes[route].apply(null, args);
-            }
-        }
+			let res = routes[route].apply(null, args);
+			resolve(res);
+                        return;
+		    }
+		}
 
-        log('Unknown URI: ' + req);
-        return 404;
-    }
-    catch (e){
-        log(`Caught error during request ${req}: ${e}`);
-        return 500;
-    }
+		console.log('Unknown URI: ' + req);
+		reject(404);
+	    }
+	    catch (e){
+		console.log(`Caught error during request ${req}: ${e}`);
+		reject(500);
+	    }
+	});
 }
 
 function reply(res, msg){
@@ -107,7 +104,7 @@ http.createServer((request, response) => {
         .catch(err => {
             reply(response, 500);
         });
-    }
-}).listen(80);
+}).listen(8000);
 
-console.log('Process started on 80');
+console.log('Process started on 8000');
+play();
