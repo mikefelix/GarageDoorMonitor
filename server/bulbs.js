@@ -13,7 +13,7 @@ let doAfterSeconds = (after, doThis) => {
 module.exports = class Bulbs {
     constructor(hueAddress, etekCreds){
         this.wemoBulbs = ['fan', 'vent', 'lamp'];
-        this.etekBulbs = ['coffee', 'piano', 'wine', 'stereo', 'aquarium', 'office'];
+        this.etekBulbs = ['coffee', 'piano', 'wine', 'stereo', 'aquarium', 'office', 'bed'];
         this.hueBulbs = {
             garage: [1],
             breezeway: [2],
@@ -90,7 +90,7 @@ module.exports = class Bulbs {
         let getWemo = promiseTimer(this.wemo.getState(), 'get wemo state'); 
         let getEtek = promiseTimer(this.etek.getState(), 'get etek state');
 
-        let res = Q.all([getHue, getWemo, getEtek]).then(states => {
+        return Q.all([getHue, getWemo, getEtek]).then(states => {
             let [hueState, wemoState, etekState] = states;
             let state = {};
             if (wemoState) state = Object.assign(state, wemoState);
@@ -99,17 +99,13 @@ module.exports = class Bulbs {
             state.history = this.history;
             return state;
         });
-
-        log(4, 'Bulbs state:');
-        log(4, res);
-        return res;
     }
 
     _hasMeter(name){
         return this.etekBulbs.indexOf(name.toLowerCase()) >= 0;
     }
 
-    _getHandler(name) {
+    _getHandler(name){
         if (this.hueBulbs.hasOwnProperty(name.toLowerCase()))
             return this.hue;
         else if (this.wemoBulbs.indexOf(name.toLowerCase()) >= 0)
