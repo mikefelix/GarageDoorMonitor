@@ -53,6 +53,8 @@ const scheduler = new Scheduler(
     turnOff
 );
 
+let devices = { bulbs, alarm, therm, garage, weather };
+
 function turnOn(name, reason){
     log(4, `turnOn ${name} because ${reason}`);
     if (name == 'housefan')
@@ -145,7 +147,7 @@ process.on('warning', e => console.warn(e.stack));
 
 function verifyAuth(req){
     log(4, `verify ${req.url}`);
-    if (req.method == 'GET' || req.url.match(/^\/warn/))
+    if (req.method == 'GET' || req.url.match(/^\/(test|warn)/))
         return true;
     if (req.method == 'POST' && /^\/(opened|closed)/.test(req.url))
         return true;
@@ -158,6 +160,13 @@ function verifyAuth(req){
 }
 
 const routes = {
+    'GET /test': async () => {
+        log.info('testing');
+        return 200;
+    },
+    'POST /test': async () => {
+        return 200;
+    },
     'POST /warn1': async () => {
         return 200;
     }, 
@@ -173,19 +182,24 @@ const routes = {
         log("Tessel reports that it is alive.");
         return 200;
     },
-    'POST /alarm/([0-6]+)/([0-9]+:[0-9]+|on|off)': async (request, days, set) => {
+    'POST /alarm/(t?[0-9]+)/([0-9]+:[0-9]+|on|off)': async (request, days, set) => {
+        let temp = days.indexOf('t') >= 0;
+        days = days.replace(/[^0-9]/, '');
+
         if (set == 'on'){
-            log(`Enable alarm for ${days}.`);
-            return await alarm.enable(days);
+            log(4, `Enable alarm for ${days}.`);
+            alarm.enable(days, temp);
         }
         else if (set == 'off'){
-            log(`Disable alarm for ${days}.`);
-            return await alarm.disable(days);
+            log(4, `Disable alarm for ${days}.`);
+            alarm.disable(days, temp);
         }
         else {
-            log(`Set alarm time to ${set}.`);
-            return await alarm.setTime(set, days);
+            log(4, `Set alarm time to ${set}.`);
+            alarm.setTime(set, days, temp);
         }
+        
+        return 200;
     },
     'POST /opened([0-9]+)?': async (request, t) => { // call from tessel
         if (!t) t = 'indefinitely';
@@ -193,12 +207,12 @@ const routes = {
         if (Times.get().isNight)
             bulbs.on('outside', 180, 'garage opened at night');
 
-        log(4, `Tessel reports opened ${t} state.`);
+        log(3, `Tessel reports opened ${t} state.`);
         //saveSnap(10);
         return "opened alert received";
     },
     'POST /closed': async () => { // call from tessel
-        log('Tessel reports closed state.');
+        log(3, 'Tessel reports closed state.');
         //saveSnap(0);
         return "closed alert received";
     },
@@ -224,6 +238,9 @@ const routes = {
     },
     'GET /state/garage': async () => {
         return await garage.getState();
+    },
+    'GET /state/weather': async () => {
+        return await weather.get();
     },
     'GET /state/lights': async () => {
         return await bulbs.getState();
@@ -334,7 +351,7 @@ const routes = {
 
 async function handleRequest(request, response){
     let req = request.method + ' ' + request.url.replace(/\?.*$/, '');
-    if (!req.match('^GET /state'))
+    if (req.match('^GET /state/alarm') || !req.match('^GET /state'))
         log(`Received call at ${format(new Date())}: ${req}`);
 
     try {

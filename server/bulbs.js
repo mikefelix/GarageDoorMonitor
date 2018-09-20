@@ -13,7 +13,7 @@ let doAfterSeconds = (after, doThis) => {
 module.exports = class Bulbs {
     constructor(hueAddress, etekCreds){
         this.wemoBulbs = ['fan', 'vent', 'lamp'];
-        this.etekBulbs = ['coffee', 'piano', 'wine', 'stereo', 'aquarium', 'office', 'bed'];
+        this.etekBulbs = ['coffee', 'piano', 'wine', 'stereo', 'aquarium', 'office', 'bed', 'grow'];
         this.hueBulbs = {
             garage: [1],
             breezeway: [2],

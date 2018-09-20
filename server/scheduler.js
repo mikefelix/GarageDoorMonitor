@@ -11,12 +11,14 @@ module.exports = class Scheduler {
         this.file = file;
         this._getState = async () => {
             let state = await getState();
-            state.bulbs.housefan = state.housefan;
-            state.bulbs.hvac = state.hvac;
-            state.bulbs.alarm = state.alarm;
-            state.bulbs.owner = {home: !state.away};
-            log(4, state);
-            return state.bulbs;
+            let ret = state.bulbs;
+            ret.housefan = state.housefan;
+            ret.hvac = state.hvac;
+            ret.alarm = state.alarm;
+            ret.owner = {home: !state.away};
+            ret.weather = state.weather;
+            log.debug(ret);
+            return ret;
         };
         this._turnOn = turnOn;
         this._turnOff = turnOff;
@@ -30,17 +32,17 @@ module.exports = class Scheduler {
     toggleOverride(name) {
         let sched = this.schedules[name];
         if (!sched){
-            log(4, `Create schedule for ${name}.`);
+            log.debug(`Create schedule for ${name}.`);
             this.schedules[name] = sched = {};
         }
 
-        log(4, `Overriding ${name}: doNotOverride ${sched.doNotOverride}, overridden ${sched.overridden}.`);
+        log.debug(`Overriding ${name}: doNotOverride ${sched.doNotOverride}, overridden ${sched.overridden}.`);
         if (!sched.doNotOverride){
             log(`Overriding schedule for ${name}.`);
             sched.overridden = !sched.overridden;
         }
 
-        log(4, `Overridden for ${name} is now ${sched.overridden}.`);
+        log.debug(`Overridden for ${name} is now ${sched.overridden}.`);
     }
 
     isOverridden(schedule){
@@ -50,7 +52,7 @@ module.exports = class Scheduler {
     async checkAll(){
         this.devices = await this._getState();
 
-        log(4, this.devices);
+        log.debug(this.devices);
 
         if (this.currentTimeIs(this.reset)){
             this._readFile();
@@ -80,7 +82,7 @@ module.exports = class Scheduler {
         if (!date) date = new Date();
         let schedule = this.schedules[name];
         if (!schedule) {
-            log(1, `Schedule ${name} not found.`);
+            log.error(`Schedule ${name} not found.`);
             return;
         }
 
@@ -89,7 +91,7 @@ module.exports = class Scheduler {
 
         let device = this.devices[name];
         if (!device){
-            log(4, `No device found: ${name}.`);
+            log.debug(`No device found: ${name}.`);
             return;
         }
 
@@ -100,7 +102,7 @@ module.exports = class Scheduler {
         let onActor = this.actors[name]['on'];
         if (onActor){
             if (!device.on){
-                log(4, `Device ${name} is off so run its 'on' actor`);
+                log.debug(`Device ${name} is off so run its 'on' actor`);
                 if (schedule.delay){
                     if (schedule.delaying === undefined){
                         schedule.delaying = schedule.delay;
@@ -122,7 +124,7 @@ module.exports = class Scheduler {
         let offActor = this.actors[name]['off'];
         if (offActor){
             if (device.on){
-                log(4, `Device ${name} is on so run its 'off' actor`);
+                log.debug(`Device ${name} is on so run its 'off' actor`);
                 if (schedule.delay){
                     if (schedule.delaying === undefined){
                         schedule.delaying = schedule.delay;
@@ -184,15 +186,15 @@ module.exports = class Scheduler {
 
     createPowerCountdownTrigger(schedule, spec, trigger, threshold){
         let key = `${schedule}_${spec}`;
-        log(4, `Create power countdown trigger for ${schedule}/${spec}/${trigger}/${threshold}.`);
+        log.debug(`Create power countdown trigger for ${schedule}/${spec}/${trigger}/${threshold}.`);
         return async (device) => {
             if (spec == 'off'){
-                log(4, `${schedule} device.power = ${device.power}`);
+                log.debug(`${schedule} device.power = ${device.power}`);
                 let time = trigger.replace(/~/, '');
                 if (device.power > threshold){
                     if (this.timers[key] === undefined){
                         // Device is on but there's no timer; create it.
-                        log(4, `Create timer for ${schedule} for ${time} minutes because device.power = ${device.power}.`);
+                        log.debug(`Create timer for ${schedule} for ${time} minutes because device.power = ${device.power}.`);
                         this.timers[key] = +time;
                     }
 
@@ -204,13 +206,13 @@ module.exports = class Scheduler {
                     }
                     
                     // Device is on and there's a timer; decrement it.
-                    log(5, `${this.timers[key]} minutes left until shutoff.`);
+                    log.trace(`${this.timers[key]} minutes left until shutoff.`);
                     this.timers[key] = this.timers[key] - 1;
                 }
                 else {
                     if (this.timers[key]){
                         // Device is off and there's still a timer; clear it.
-                        log(4, `Removing unexpired timer for ${schedule}.`);
+                        log.debug(`Removing unexpired timer for ${schedule}.`);
                         delete this.timers[key];
                     }
                     else {
@@ -227,7 +229,7 @@ module.exports = class Scheduler {
         let key = `${schedule}_${spec}`;
         return async (device) => {
             if (spec == 'off'){
-                //log(4, `${schedule} device.power = ${device.power}`);
+                //log.debug(`${schedule} device.power = ${device.power}`);
                 let time = trigger.replace(/\//, '');
                 if (device.on){
                     if (this.timers[key] === undefined){
@@ -244,13 +246,13 @@ module.exports = class Scheduler {
                     }
 
                     // Device is on and there's a timer; decrement it.
-                    log(5, `${this.timers[key]} minutes left until shutoff.`);
+                    log.trace(`${this.timers[key]} minutes left until shutoff.`);
                     this.timers[key] = this.timers[key] - 1;
                 }
                 else {
                     if (this.timers[key]){
                         // Device is off and there's still a timer; clear it.
-                        log(4, `Removing unexpired timer for ${schedule}.`);
+                        log.debug(`Removing unexpired timer for ${schedule}.`);
                         delete this.timers[key];
                     }
                     else {
@@ -269,7 +271,7 @@ module.exports = class Scheduler {
         first = first.trim();
         second = second.trim();
 
-        log(3, `${schedule} will turn ${spec} when ${first} ${op} ${second}.`);
+        log.info(`${schedule} will turn ${spec} when ${first} ${op} ${second}.`);
         return async (device) => {
             let trigger1 = this.parseTrigger(schedule, spec, first);
             let trigger2 = this.parseTrigger(schedule, spec, second);
@@ -290,16 +292,16 @@ module.exports = class Scheduler {
             else if (op == '>=')
                 res = set1 >= set2;
 
-            log(5, `${first} (${set1}) ${op} ${second} (${set2})`);
+            log.trace(`${first} (${set1}) ${op} ${second} (${set2})`);
             if (res)
-                log(3, `Comparison passed: ${first} (${set1}) ${op} ${second} (${set2})`);
+                log.info(`Comparison passed: ${first} (${set1}) ${op} ${second} (${set2})`);
 
             return res;
         }
     }
 
     parseTrigger(schedule, spec, trigger){
-        log(3, `Parse trigger ${schedule}/${spec}/${trigger}.`);
+        log.debug(`Parse trigger ${schedule}/${spec}/${trigger}.`);
         if (this.specifiesPowerCountdownTrigger(trigger)) 
             return this.createPowerCountdownTrigger(schedule, spec, trigger, 7);
 
@@ -314,10 +316,10 @@ module.exports = class Scheduler {
             let trigger1 = this.parseTrigger(schedule, spec, first.trim());
             let trigger2 = this.parseTrigger(schedule, spec, second.trim());
             return async (device) => {
-                log(5, `run trigger ${trigger}`);
+                log.trace(`run trigger ${trigger}`);
                 let cond1 = await trigger1(device);
                 if (cond1){
-                    log(4, `|: Condition 1 (${first}) is ${cond1}`);
+                    log.debug(`|: Condition 1 (${first}) is ${cond1}`);
                     return true;
                 }
 
@@ -326,7 +328,7 @@ module.exports = class Scheduler {
                     return true;
                 }
 
-                log(4, `|: Condition 1 (${first}) is ${cond1} and condition 2 (${second}) is ${cond2}.`);
+                log.debug(`|: Condition 1 (${first}) is ${cond1} and condition 2 (${second}) is ${cond2}.`);
                 return false;
             }
         }
@@ -337,10 +339,10 @@ module.exports = class Scheduler {
             let trigger2 = this.parseTrigger(schedule, spec, second.trim());
             let trigger3 = this.parseTrigger(schedule, spec, third.trim());
             return async (device) => {
-                log(4, `run trigger ${trigger}`);
+                log.debug(`run trigger ${trigger}`);
                 let cond1 = await trigger1(device);
                 if (cond1){
-                    log(4, `|: Condition 1 (${first}) is ${cond1}`);
+                    log.debug(`|: Condition 1 (${first}) is ${cond1}`);
                     return true;
                 }
 
@@ -354,7 +356,7 @@ module.exports = class Scheduler {
                     return true;
                 }
 
-                log(4, `|: Condition 1 (${first}) is ${cond1} and condition 2 (${second}) is ${cond2}.`);
+                log.debug(`|: Condition 1 (${first}) is ${cond1} and condition 2 (${second}) is ${cond2}.`);
                 return false;
             }
         }
@@ -364,12 +366,12 @@ module.exports = class Scheduler {
             let trigger1 = this.parseTrigger(schedule, spec, first.trim());
             let trigger2 = this.parseTrigger(schedule, spec, second.trim());
             return async (device) => {
-                log(4, `run trigger ${trigger}`);
+                log.debug(`run trigger ${trigger}`);
                 let cond1 = await trigger1(device);
                 if (!cond1) return false;
                 let cond2 = await trigger2(device);
                 if (!cond2) return false;
-                log(4, `&: Condition 1 (${first}) is ${cond1} and condition 2 (${second}) is ${cond2}.`);
+                log.debug(`&: Condition 1 (${first}) is ${cond1} and condition 2 (${second}) is ${cond2}.`);
                 return true;
             }
         }
@@ -380,14 +382,14 @@ module.exports = class Scheduler {
             let trigger2 = this.parseTrigger(schedule, spec, second.trim());
             let trigger3 = this.parseTrigger(schedule, spec, third.trim());
             return async (device) => {
-                log(4, `run trigger ${trigger}`);
+                log.debug(`run trigger ${trigger}`);
                 let cond1 = await trigger1(device);
                 if (!cond1) return false;
                 let cond2 = await trigger2(device);
                 if (!cond2) return false;
                 let cond3 = await trigger3(device);
                 if (!cond3) return false;
-                log(4, `&: Condition 1 (${first}) is ${cond1} and condition 2 (${second}) is ${cond2}.`);
+                log.debug(`&: Condition 1 (${first}) is ${cond1} and condition 2 (${second}) is ${cond2}.`);
                 return true;
             }
         }
@@ -395,26 +397,26 @@ module.exports = class Scheduler {
         // e.g. coffee.power
         if (/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+([+-][0-9]+)?$/.test(trigger)){
             let [m, obj, key, adj] = trigger.match(/^([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)([+-][0-9]+)?$/);
-            log(3, `${schedule} will turn ${spec} at ${trigger}`);
+            log.info(`${schedule} will turn ${spec} at ${trigger}`);
             return async (device) => {
                 let dev = this.devices[obj.trim()];
                 if (!dev) {
-                    log(1, `Unknown device ${obj.trim()}.`);
+                    log.error(`Unknown device ${obj.trim()}.`);
                     return undefined;
                 }
 
                 let val = dev[key.trim()]; 
                 if (val === undefined){
-                    log(1, `Property ${key} not found on ${obj}. ${JSON.stringify(dev)}`);
+                    log.error(`Property ${key} not found on ${obj}. ${JSON.stringify(dev)}`);
                     return false;
                 }
 
-                log(4, `${obj}.${key} = ${val}`);
+                log.debug(`${obj}.${key} = ${val}`);
 
                 // TODO: this is hacky
                 let maybeTime = Times.parse(val + (adj || ''));
                 if (maybeTime){
-                    log(4, `Treating property trigger ${trigger} as time ${maybeTime}.`);
+                    log.debug(`Treating property trigger ${trigger} as time ${maybeTime}.`);
                     return this.currentTimeIs(maybeTime);
                 }
                 else {
@@ -433,7 +435,7 @@ module.exports = class Scheduler {
             let [m, func] = trigger.match(/^!(.+)$/);
             let trigFunc = this.parseTrigger(schedule, spec, func.trim());
             return async (device) => {
-                log(4, 'test trigger ' + trigger);
+                log.debug('test trigger ' + trigger);
                 return !(await trigFunc(device));
             }
         }
@@ -442,7 +444,7 @@ module.exports = class Scheduler {
         if (/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(trigger)){
             return async (device) => {
                 let res = await this._hostIsUp(trigger);
-                log(4, 'ping trigger gave ' + res);
+                log.debug('ping trigger gave ' + res);
                 return res;
             }
         }
@@ -458,16 +460,16 @@ module.exports = class Scheduler {
                 let time = moment();
                 let start = Times.parse(this.ranges[trigger].start);
                 let end = Times.parse(this.ranges[trigger].end);
-                log(4, `isAfter(${start}) ${time.isAfter(start)}`);
-                log(4, `isBefore(${end}) ${time.isBefore(end)}`);
+                log.debug(`isAfter(${start}) ${time.isAfter(start)}`);
+                log.debug(`isBefore(${end}) ${time.isBefore(end)}`);
                 return time.isAfter(start) && time.isBefore(end);
             }
         }
 
-        log(4, `Parsing ${schedule} as time.`);
+        log.debug(`Parsing ${schedule} as time.`);
         let time = Times.parse(trigger);
         if (time) {
-            log(3, `${schedule} will turn ${spec} today at ${format(time)}.`);
+            log.info(`${schedule} will turn ${spec} today at ${format(time)}.`);
             return async () => {
                 return this.currentTimeIs(time);
             }
@@ -485,7 +487,7 @@ module.exports = class Scheduler {
         */
 
         if (/^[A-Za-z0-9_]+$/.test(trigger)){
-            log(3, `${schedule} will turn ${spec} with ${trigger}.`);
+            log.info(`${schedule} will turn ${spec} with ${trigger}.`);
             return async (device) => {
                 if (/^[0-9]+$/.test(trigger)){
                     return +trigger;
@@ -518,7 +520,7 @@ module.exports = class Scheduler {
     }
 
     setTrigger(schedule, spec, trigger){
-        log(4, `Set ${spec} to ${trigger}`);
+        log.debug(`Set ${spec} to ${trigger}`);
         let action, triggerFunc = this.parseTrigger(schedule, spec, trigger);
         if (spec == 'on'){
             action = async () => {
@@ -541,7 +543,7 @@ module.exports = class Scheduler {
                     delete this.timers[`${schedule}_${spec}`];
                 }
             }
-            else log(4, `Skipping check for ${schedule} because it has been overridden.`);
+            else log.debug(`Skipping check for ${schedule} because it has been overridden.`);
         };
     }
 
@@ -550,13 +552,13 @@ module.exports = class Scheduler {
             const { stdout, stderr } = await exec('ping -w 1 ' + host); 
 
             if (stderr) {
-                log(4, "Failed to ping. " + stderr);
+                log.debug("Failed to ping. " + stderr);
                 return false;
             }
             else {
                 let [m, num] = stdout.match(/([0-9]+) received/);
                 if (num === undefined){
-                    log(1, "Cannot find packets received in output:");
+                    log.error("Cannot find packets received in output:");
                     log(stdout);
                 }
 
@@ -565,7 +567,7 @@ module.exports = class Scheduler {
             }
         }
         catch (e) {
-            log(4, 'Ping failed. ' + e);
+            log.debug('Ping failed. ' + e);
             return false;
         }    
     }

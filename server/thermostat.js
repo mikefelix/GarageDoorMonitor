@@ -22,23 +22,25 @@ module.exports = class Thermostat {
             getAway = this._callThermostat('away')
                 .then(res => {
                     if (!res || !res.data){
-                        log('No data found in away response.');
+                        log.error('No data found in away response.');
                         this.away = false;
                     } 
                     else {
                         let away = res.data.away != 'home';
-                        if (away != this.away) log(`Set away to ${away} (${res.data.away}).`);
+                        if (away != this.away) 
+                            log.info(`Set away to ${away} (${res.data.away}).`);
+
                         this.away = away;
                     }
                 })
-                .catch(err => log(`Error getting away state: ${err}`));
+                .catch(err => log.error(`Error getting away state: ${err}`));
         }
         
         this.refreshAwayCounter = (this.refreshAwayCounter + 1) % this.refreshAwayEvery;
 
         let getTherm = this._callThermostat()
             .then(res => this.state = this._trimThermResponse(res))
-            .catch(err => log(`Error getting therm state: ${err}`));
+            .catch(err => log.error(`Error getting therm state: ${err}`));
 
         return getAway ?
             Q.all([getAway, getTherm]) :
@@ -58,7 +60,7 @@ module.exports = class Thermostat {
     }
 
     async set(prop, value){
-        log(`Set ${prop} to ${value}.`);
+        log.info(`Set ${prop} to ${value}.`);
         return await this._callThermostat(prop, value);
     }
 
@@ -138,10 +140,10 @@ module.exports = class Thermostat {
             return res;
         }
         catch (err){
-            log(`Error while calling Nest (${prop ? prop : 'therm'}): ${err}`);
+            log.error(`Error while calling Nest (${prop ? prop : 'therm'}): ${err}`);
             if (/429/.test(err)){
                 this.backoff = this.backoff + 1;
-                log(`429 from Nest. Increasing backoff to ${this.backoff}.`);
+                log.info(`429 from Nest. Increasing backoff to ${this.backoff}.`);
             }
 
             return undefined;

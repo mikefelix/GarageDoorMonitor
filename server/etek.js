@@ -12,70 +12,106 @@ module.exports = class Etek {
     }
 
     async getState(){
-        let devices = await this.client.getDevices();
-        let result = {};
-        for (let i in devices){
-            let device = devices[i];
-            if (this.bulbs.indexOf(device.name) >= 0){
-                let meter;
-                if (this.meterBulbs.indexOf(device.name) >= 0){
-                    log(`get meter: ${device.id}`);
-                    meter = await this.client.getMeter(device.id);
+        try {
+            let devices = await this.client.getDevices();
+            let result = {};
+            for (let i in devices){
+                let device = devices[i];
+                if (this.bulbs.indexOf(device.name) >= 0){
+                    let meter;
+                    if (this.meterBulbs.indexOf(device.name) >= 0){
+                        log(`get meter: ${device.id}`);
+                        meter = await this.client.getMeter(device.id);
+                    }
+
+                    result[device.name] = {
+                        on: device.on,
+                        power: meter !== undefined ? meter.power : undefined
+                    };
                 }
-
-                result[device.name] = {
-                    on: device.on,
-                    power: meter !== undefined ? meter.power : undefined
-                };
             }
-        }
 
-        return result;
+            return result;
+        }
+        catch (e){
+            log(1, `Can't connect to etek. ${e}`);
+            return {};
+        }
     }
 
     async getMeter(name){
-        let device = await this.client.getDevice(name);
-        let meter = await this.client.getMeter(device.id);
-        return meter.power;
+        try {
+            let device = await this.client.getDevice(name);
+            let meter = await this.client.getMeter(device.id);
+            return meter.power;
+        }
+        catch (e){
+            log(1, `Can't connect to etek for meter. ${e}`);
+            return 0;
+        }
     }
 
     async getBulbState(name){
-        let device = await this.client.getDevice(name);
-        let meter = await this.client.getMeter(device.id);
-        return {
-            on: device.on,
-            power: meter
-        };
+        try {
+            let device = await this.client.getDevice(name);
+            let meter = await this.client.getMeter(device.id);
+            return {
+                on: device.on,
+                power: meter
+            };
+        }
+        catch (e){
+            log(1, `Can't connect to etek for device ${name}. ${e}`);
+            return {};
+        }
     }
 
     async toggle(name, timeout) {
-        let device = await this.client.getDevice(name);
-        if (device.on) {
-            log(`Toggling device ${device.name} (${device.id}) off.`);
-            let state = await this.client.turnOff(device.id);
-            log(`Toggled off. New state is ${state.on}.`);
-            return true;
-        }
-        else {
-            log(`Toggling device ${device.name} (${device.id}) on.`);
-            let state = await this.client.turnOn(device.id);
-            log(`Toggled on. New state is ${state.on}.`);
-            return true;
+        try {
+            let device = await this.client.getDevice(name);
+            if (device.on) {
+                log(`Toggling device ${device.name} (${device.id}) off.`);
+                let state = await this.client.turnOff(device.id);
+                log(`Toggled off. New state is ${state.on}.`);
+                return true;
+            }
+            else {
+                log(`Toggling device ${device.name} (${device.id}) on.`);
+                let state = await this.client.turnOn(device.id);
+                log(`Toggled on. New state is ${state.on}.`);
+                return true;
+            }
+        } 
+        catch (e){
+            log(1, `Can't connect to toggle device ${name}. ${e}`);
+            return false;
         }
     }
 
     async on(name, timeout) {
-        let device = await this.client.getDevice(name);
-        log(`Turning device ${device.name} (${device.id}) on.`);
-        await this.client.turnOn(device.id);
-        return true;
+        try {
+            let device = await this.client.getDevice(name);
+            log(`Turning device ${device.name} (${device.id}) on.`);
+            await this.client.turnOn(device.id);
+            return true;
+        } 
+        catch (e){
+            log(1, `Can't connect to toggle device ${name}. ${e}`);
+            return false;
+        }
     }
 
     async off(name) {
-        let device = await this.client.getDevice(name);
-        log(`Turning device ${device.name} (${device.id}) off.`);
-        await this.client.turnOff(device.id);
-        return true;
+        try {
+            let device = await this.client.getDevice(name);
+            log(`Turning device ${device.name} (${device.id}) off.`);
+            await this.client.turnOff(device.id);
+            return true;
+        } 
+        catch (e){
+            log(1, `Can't connect to toggle device ${name}. ${e}`);
+            return false;
+        }
     }
 
     /*async _getDevices() {

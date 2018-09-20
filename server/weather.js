@@ -9,7 +9,7 @@ module.exports = class Weather {
     async get(prop, value){
         try {
             let res = await axios({ method: 'GET', url: this.weatherUrl });
-            return res;
+            return res.data;
         }
         catch (err){
             log(1, `Error while calling weather URL: ${err}`);

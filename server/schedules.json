@@ -59,9 +59,13 @@
             "off": "coffee.power > 500"
         },
         "bed": {
-            "on": "22:30 & owner.home & weather.temp < 65",
+            "on": "22:30 & owner.home & weather.temp < 60",
             "off": "alarm.time | 10:00",
             "cycle": "/540"
+        },
+        "grow": {
+            "on": "06:00",
+            "off": "18:00"
         }
     }
 }

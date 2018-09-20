@@ -2,7 +2,7 @@ const moment = require('moment-timezone'),
       format = require('./format.js'),
       kafka = require('kafka-node'),
       client = new kafka.KafkaClient({kafkaHost: 'localhost:9092'}),
-      producer = new kafka.Producer(client),
+      producer = /*{on:()=>{}},//*/new kafka.Producer(client),
       pad = 32;
 
 let kafkaReady = false;
@@ -24,7 +24,7 @@ module.exports = function(segment, defaultLevel){
 
     let dateFormat = 'MM/DD h:mm:ssa';
 
-    return function() {
+    const logIt = function() {
         let msg, level;
         if (arguments.length == 2 && typeof arguments[0] == 'number'){
             level = arguments[0];
@@ -57,4 +57,12 @@ module.exports = function(segment, defaultLevel){
             });
         }
     };
+
+    logIt.error = function(msg) { return logIt(1, msg); };
+    logIt.warn = function(msg) { return logIt(2, msg); };
+    logIt.info = function(msg) { return logIt(3, msg); };
+    logIt.debug = function(msg) { return logIt(4, msg); };
+    logIt.trace = function(msg) { return logIt(5, msg); };
+
+    return logIt;
 }
