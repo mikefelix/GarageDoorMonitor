@@ -14,5 +14,6 @@
     "nestToken": "c.E7APpbqdmTJaPRI0ZnojtdIUFOjMOQyqWjV0WBmIuOBTASWrXg7AlFjAmVKxQ2wUasO0hq9AbyhZ3bbPf22QakzvNLMypjuO5QzFEwqrDjqMtiiNgE7oMUIWAJjkQoBYl83TYt7l0FPNUwmP",
     "weatherUrl": "https://mozzarelly.com/weather/current",
     "alarmAddress": "http://192.168.0.144:8000",
+    "fermenterUrl": "https://mozzarelly.com/brewpi/socketmessage.php",
     "logLevel": 2
 }

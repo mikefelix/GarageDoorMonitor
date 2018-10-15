@@ -19,7 +19,6 @@ var ALERT_BASE_URL = "https://mozzarelly.com/home/";
 
 var lastX = 0, lastY = 0, lastZ = 0;
 var currX = 0, currY = 0, currZ = 0;
-//var counter = 0;
 var closeTimer;
 var keepOpen = false;
 var triedToClose = 0;
@@ -52,12 +51,13 @@ function reply(res, msg){
     res.end();
 }
 
-function sendAlert(alert){
+function sendAlert(alert, body){
     console.log("Send " + alert);
     request({
         uri: ALERT_BASE_URL + alert,
         method: "POST",
         timeout: 10000,
+        body: body,
         followRedirect: true,
         maxRedirects: 10
     }, function(error, response, body) {
@@ -175,6 +175,19 @@ function resetCloseTimer(){
         closeTimer = setTimeout(attemptToClose, wait);
     }
 };
+
+process.on('uncaughtException', function (err) {
+    let msg = 'Uncaught exception: ' + err.message + "\n";
+    msg += err.stack;
+    sendAlert('garage-error', msg);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    let msg = 'Unhandled promise: ' + reason + "\n";
+    sendAlert('garage-error', msg);
+});
+
+process.on('warning', e => console.warn(e.stack));
 
 http.createServer(function(request, response){
   var uri = url.parse(request.url).pathname;

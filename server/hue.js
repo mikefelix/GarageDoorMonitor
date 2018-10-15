@@ -159,10 +159,8 @@ module.exports = class Hue {
 
     _req(method, endpoint, body, retrying) {
         return new Promise((resolve, reject) => {
-            let o = {
-                headers: {'content-type' : 'application/json'},
-                url: `${this.hueAddress}/${endpoint}`
-            }
+            let url = `${this.hueAddress}/${endpoint}`;
+            let o = { headers: {'content-type' : 'application/json'}, url };
             
             if (body)
                 o.body = body;
@@ -175,7 +173,7 @@ module.exports = class Hue {
                     }
                     else {
                         log(2, 'Retrying', url);
-                        req(method, url, body, true)
+                        this._req(method, url, body, true)
                           .then(res2 => resolve(res2))
                           .catch(err2 => reject(err2));
                     }

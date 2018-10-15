@@ -13,7 +13,7 @@ let doAfterSeconds = (after, doThis) => {
 module.exports = class Bulbs {
     constructor(hueAddress, etekCreds){
         this.wemoBulbs = ['fan', 'vent', 'lamp'];
-        this.etekBulbs = ['coffee', 'piano', 'wine', 'stereo', 'aquarium', 'office', 'bed', 'grow'];
+        this.etekBulbs = ['coffee', 'tessel', 'wine', 'stereo', 'aquarium', 'office', 'bed', 'grow'];
         this.hueBulbs = {
             garage: [1],
             breezeway: [2],
@@ -23,7 +23,7 @@ module.exports = class Bulbs {
 
         this.hue = new Hue(hueAddress, this.hueBulbs);
         this.wemo = new Wemo(this.wemoBulbs);
-        this.etek = new Etek(etekCreds[0], etekCreds[1], etekCreds[2], this.etekBulbs, ['piano', 'coffee']);
+        this.etek = new Etek(etekCreds[0], etekCreds[1], etekCreds[2], this.etekBulbs, ['coffee', 'bed']);
         this.history = {};
         this.overrides = {};
 
@@ -40,8 +40,12 @@ module.exports = class Bulbs {
         }
     }
 
-    toggleOverride(name){
-        this.overrides[name] = this.overrides[name] != true;
+    removeOverride(name){
+        delete this.overrides[name];
+    }
+
+    setOverride(name){
+        this.overrides[name] = true;
     }
 
     async getBulb(name){
@@ -85,7 +89,7 @@ module.exports = class Bulbs {
     async getEtekState() { return await this.etek.getState(); }
 
     getState(){
-        let promiseTimer = timeout(15000, null);
+        let promiseTimer = timeout(6000, null);
         let getHue = promiseTimer(this.hue.getState(), 'get hue state');
         let getWemo = promiseTimer(this.wemo.getState(), 'get wemo state'); 
         let getEtek = promiseTimer(this.etek.getState(), 'get etek state');
@@ -97,6 +101,12 @@ module.exports = class Bulbs {
             if (hueState) state = Object.assign(state, hueState);
             if (etekState) state = Object.assign(state, etekState);
             state.history = this.history;
+            for (let override in this.overrides){
+                if (this.overrides[override]){
+                    state[override].overridden = true;
+                }
+            }
+
             return state;
         });
     }
@@ -186,22 +196,22 @@ module.exports = class Bulbs {
         if (expectedState != currentState.on){
             let tried = 0;
             do {
-                log(4, `Toggling ${bulbName} to ${expectedState} for ${source || 'unknown reason'}.`);
+                log.debug(`Toggling ${bulbName} to ${expectedState} for ${source || 'unknown reason'}.`);
                 tried++;
                 await act.call(handler, bulbName);
-                log(4, `Made call. Checking result.`);
+                log.trace(`Made call. Checking result.`);
                 currentState = await handler.getBulbState(bulbName);
                 if (currentState.on != expectedState)
-                    log(3, `Retrying because new state is ${currentState.on} instead of ${expectedState}.`);
+                    log.debug(`Retrying because new state is ${currentState.on} instead of ${expectedState}.`);
             }
             while (tried < 10 && expectedState != currentState.on);
 
             if (tried > 1){
-                log(3, `Toggling ${bulbName} to ${expectedState} took ${tried} tries!`);
+                log.info(`Toggling ${bulbName} to ${expectedState} took ${tried} tries!`);
             }
 
             if (tried >= 10) {
-                log(1, `Could not change ${bulbName} to ${currentState.on} after ${tried} tries.`);
+                log.info(`Could not change ${bulbName} to ${currentState.on} after ${tried} tries.`);
             }
         }
 

@@ -1,5 +1,6 @@
 var axios = require('axios'),
     fs = require('fs'),
+    format = require('./format.js'),
     log = require('./log.js')('Alarm', 2);
 
 module.exports = class Alarm {
@@ -9,48 +10,79 @@ module.exports = class Alarm {
     }
 
     nextEnabled(){
+        if (this.config.override && this.config.override.disable){
+            return false;
+        }
+
         let now = new Date();
-        return this.hasRungToday() ? this.config.enabled[(now.getDay() + 1) % 7] : this.config.enabled[now.getDay()];
+        return this.hasTriggeredToday() ? this.config.enabled[(now.getDay() + 1) % 7] : this.config.enabled[now.getDay()];
     }
 
     nextTime(){
+        if (this.config.override && this.config.override.time){
+            return this.config.override.time;
+        }
+
         let now = new Date();
-        return this.hasRungToday() ? this.config.time[(now.getDay() + 1) % 7] : this.config.time[now.getDay()];
+        return this.hasTriggeredToday() ? this.config.time[(now.getDay() + 1) % 7] : this.config.time[now.getDay()];
     }
 
-    hasRungToday(){
-        let now = new Date();
-        let [todaysAlarmHour, todaysAlarmMin] = (this.config.time[now.getDay()] || "00:00").split(':');
-        return todaysAlarmHour < now.getHours() || todaysAlarmHour == now.getHours() && todaysAlarmMin < now.getMinutes;
+    hasTriggeredToday(){
+        let lastTriggeredDay = this.config.lastTriggeredDay || "never";
+        let today = format(new Date(), "YYYYMMDD");
+        log.debug(`Last triggered is ${lastTriggeredDay}. Today is ${today}.`);
+        return lastTriggeredDay == format(new Date(), "YYYYMMDD");
+    }
+
+    enabledForToday(){
+        let day = new Date().getDay();
+        return this.config.enabled[day];
     }
 
     timeForToday(){
-        if (this.config.override){
-            if (this.config.override.disable){
-                return false;
-            }
-            else if (this.config.override.time){
-                return this.config.override.time;
-            }
+        if (this.hasTriggeredToday()){
+            return this.config.lastTriggeredTime;
+        }
+        
+        if (this.config.override && this.config.override.time){
+            return this.config.override.time;
         }
 
         let day = new Date().getDay();
-        return this.config.enabled[day] ? this.config.time[day] : false;
+        return this.config.time[day] || "06:00";
+    }
+
+    timeToTrigger(){
+        if (this.hasTriggeredToday()){
+            return false;
+        }
+
+        if (this.config.override && this.config.override.time){
+            return this.config.override.time;
+        }
+
+        let day = new Date().getDay();
+        return this.config.time[day] || "06:00";
     }
 
     weeklyTimes(){
         return [0,1,2,3,4,5,6].map(i => this.config.enabled[i] ? this.config.time[i] : false);
     }
 
-    async get(){
+    async getState(){
         return {
             on: (await this.getPiState()).on,
             next: {
-                day: this.hasRungToday() ? 'tomorrow' : 'today',
+                day: this.hasTriggeredToday() ? 'tomorrow' : 'today',
                 enabled: this.nextEnabled(),
                 time: this.nextTime()
             },
-            time: this.timeForToday(),
+            time: this.timeToTrigger(),
+            ringTimeToday: this.timeForToday(),
+            lastTriggered: {
+                day: this.config.lastTriggeredDay,
+                time: this.config.lastTriggeredTime
+            },
             times: this.config.time,
             override: this.config.override,
             enabled: this.config.enabled
@@ -64,7 +96,7 @@ module.exports = class Alarm {
         else {
             for (let index in this.config.time){
                 if (days.indexOf(index) >= 0){
-                    log(`Set alarm time to ${time} for day ${index}.`);
+                    log.info(`Set alarm time to ${time} for day ${index}.`);
                     this.config.time[index] = time;
                 }
             }
@@ -93,12 +125,15 @@ module.exports = class Alarm {
             return (await axios({ method: 'GET', url: this.piAddress })).data;
         }
         catch (e){
-            log(1, "Could not communicate with Pi: " + e);
+            log.error("Could not communicate with Pi: " + e);
             return {};
         }
     }
 
     async on(){
+        this.config.lastTriggeredDay = format(new Date(), "YYYYMMDD");
+        this.config.lastTriggeredTime = format(new Date(), "HH:mm");
+
         let ring = true;
         if (this.config.override){
             if (this.config.override.disable){
@@ -106,19 +141,32 @@ module.exports = class Alarm {
                 ring = false;
             }
 
-            this.config.days--;
-            if (this.config.override.days == 0)
+            this.config.override.days = (this.config.override.days || 0) - 1;
+            if (this.config.override.days <= 0){
+                log.info('Removing alarm override.');
                 delete this.config.override;
-
-            this._writeFile();
+            }
         }
             
-        if (!ring)
-            return true;
+        if (ring){
+            try {
+                log.info(`Ringing alarm.`);
+                let res = await axios({ method: 'POST', url: this.piAddress + '/go' });
+            }
+            catch (e) {
+                log.error("Could not communicate with Pi: " + e);
+                return false;
+            }
+        }
 
+        this._writeFile();
+        return true;
+    }
+
+    async off(){
         try {
-            log.info(`Ringing alarm.`);
-            let res = await axios({ method: 'POST', url: this.piAddress + '/go' });
+            log.info(`Silencing alarm.`);
+            let res = await axios({ method: 'POST', url: this.piAddress + '/stop' });
             return true;
         }
         catch (e) {
@@ -127,22 +175,10 @@ module.exports = class Alarm {
         }
     }
 
-    async off(){
-        try {
-            log(`Silencing alarm.`);
-            let res = await axios({ method: 'POST', url: this.piAddress + '/stop' });
-            return true;
-        }
-        catch (e) {
-            log(1, "Could not communicate with Pi: " + e);
-            return false;
-        }
-    }
-
     _setEnabled(enabled, days, times){
         for (let index in this.config.enabled){
             if (days.indexOf(index) >= 0){
-                log(`Set alarm enabled to ${enabled} for day ${index}.`);
+                log.info(`Set alarm enabled to ${enabled} for day ${index}.`);
                 this.config.enabled[index] = enabled;
             }
         }
@@ -155,7 +191,7 @@ module.exports = class Alarm {
         }
         
         if (!conf || conf == ''){
-            log(2, `No alarm configuration found; writing default.`);
+            log.warn(`No alarm configuration found; writing default.`);
             this.config = {
                 time: [ '09:01', '08:01', '08:01', '08:01', '08:01', '08:01', '09:01' ],
                 enabled: [ true, true, true, true, true, true, true ]
@@ -172,7 +208,11 @@ module.exports = class Alarm {
     }
 
     _writeFile(){
-        log(1, `Writing alarm config: ${JSON.stringify(this.config)}.`);
+        if (this.config.override && this.config.override.days == 0){
+            delete this.config.override;
+        }
+
+        log.debug(`Writing alarm config: ${JSON.stringify(this.config)}.`);
         return fs.writeFileSync('./_alarm.json', JSON.stringify(this.config));
     }
 

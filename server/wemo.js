@@ -16,7 +16,7 @@ module.exports = class Wemo {
     }
 
     getState(){
-        let promiseTimer = timeout(10000, null);
+        let promiseTimer = timeout(5000, null);
 
         let promises = [];
         for (let i = 0; i < this.bulbs.length; i++){

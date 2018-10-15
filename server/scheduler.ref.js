@@ -17,6 +17,7 @@ module.exports = class Scheduler {
             ret.alarm = state.alarm;
             ret.owner = {home: !state.away};
             ret.weather = state.weather;
+            ret.garagedoor = state.garage;
             log.debug(ret);
             return ret;
         };
@@ -31,8 +32,7 @@ module.exports = class Scheduler {
     removeOverride(name){
         let sched = this.schedules[name];
         if (!sched){
-            log.debug(`Create schedule for ${name}.`);
-            this.schedules[name] = sched = {};
+            return;
         }
 
         sched.overridden = false;
@@ -42,8 +42,8 @@ module.exports = class Scheduler {
     setOverride(name) {
         let sched = this.schedules[name];
         if (!sched){
-            log.debug(`Create schedule for ${name}.`);
-            this.schedules[name] = sched = {};
+            log.debug(`No override necessary for ${name}.`);
+            return false;
         }
 
         log.debug(`Overriding ${name}: doNotOverride ${sched.doNotOverride}, overridden ${sched.overridden}.`);
@@ -53,6 +53,7 @@ module.exports = class Scheduler {
         }
 
         log.debug(`Overridden for ${name} is now ${sched.overridden}.`);
+        return true;
     }
 
     isOverridden(schedule){
@@ -123,7 +124,8 @@ module.exports = class Scheduler {
                     }
                 }
 
-                await onActor(device);
+                if (await onActor(device))
+                    return;
             }
         }
 
@@ -150,7 +152,8 @@ module.exports = class Scheduler {
         }
     }
 
-    getSchedules(){
+    async getSchedules(){
+        this.devices = await this._getState();
         let schedules = {};
         for (let sched in this.schedules) {
             let spec = this.schedules[sched];
@@ -175,7 +178,14 @@ module.exports = class Scheduler {
             }
         }
 
-        return schedules;
+        let ranges = this.ranges;
+        for (let r in ranges){
+            if (ranges.hasOwnProperty(r)){
+                ranges[r].active = this._rangeActive(r);
+            }
+        }
+
+        return { schedules, ranges };
     }
 
     createPowerCountdownTrigger(schedule, spec, trigger, match){
@@ -374,42 +384,17 @@ module.exports = class Scheduler {
     }
 
     createDevicePropertyTrigger(schedule, spec, trigger, match){
-        let [obj, key, adj] = match;
         log.debug(`${schedule} will turn ${spec} at ${trigger}`);
         return async (device) => {
-            let dev = this.devices[obj.trim()];
-            if (!dev) {
-                log.error(`Unknown device ${obj.trim()}.`);
-                return undefined;
+            let val = this._getDeviceProp(match);
+            if (!val) return false;
+
+            if (val.toString().match(/[0-9]{2}:[0-9]{2}/){
+                log.debug(`Treating property trigger ${trigger} as time.`);
+                return this.currentTimeIs(val);
             }
 
-            let val = dev[key.trim()]; 
-            if (val === undefined){
-                log.error(`Property ${key} not found on ${obj}. ${JSON.stringify(dev)}`);
-                return false;
-            }
-
-            log.debug(`${obj}.${key} = ${val}`);
-
-            if (val === 'false' || !val){
-                return false;
-            }
-
-            // TODO: this is hacky
-            let maybeTime = Times.parse(val + (adj || ''));
-            if (maybeTime){
-                log.debug(`Treating property trigger ${trigger} as time ${maybeTime}.`);
-                return this.currentTimeIs(maybeTime);
-            }
-            else {
-                if (adj){
-                    let adjNum = +adj.replace(/[^0-9]/g, '');
-                    if (adj.startsWith('-')) adjNum = -adjNum;
-                    val = val + adjNum;
-                }
-
-                return val;
-            }
+            return val;
         }
     }
 
@@ -441,6 +426,17 @@ module.exports = class Scheduler {
         '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$': this.createPingTrigger
     }
 
+    _rangeActive(name){
+        let start = this._asTime(this.ranges[name].start);
+        let end = this._asTime(this.ranges[name].end);
+        if (!start || !end) 
+            return false;
+
+        let between = Times.isBetween(start, end));
+        log.debug(`In range ${name}: ${between}`);
+        return between;
+    }
+
     parseTrigger(schedule, spec, trigger){
         log.debug(`Parse trigger ${schedule}/${spec}/${trigger}.`);
         for (let pattern in this.patterns){
@@ -455,13 +451,10 @@ module.exports = class Scheduler {
 
         if (this.ranges && this.ranges.hasOwnProperty(trigger)){
             return async (device) => {
-                let time = moment();
-                let start = format(Times.parse(this.ranges[trigger].start), 'HH:mm');
-                let end = format(Times.parse(this.ranges[trigger].end), 'HH:mm');
-                return Times.isBetween(time, start, end);
+                return this._rangeActive(trigger);
             }
         }
-
+j
         if (this.devices.hasOwnProperty(trigger)){
             log.debug(`Trigger is a device: ${trigger}`);
             return async (device) => {
@@ -494,6 +487,68 @@ module.exports = class Scheduler {
         }
 
         throw 'Unknown trigger format: ' + trigger;
+    }
+
+    _getDeviceProp(spec){
+        let [_, obj, key, adj] = spec.match(/^([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)([+-][0-9]+)?$/);
+        let dev = this.devices[obj];
+        if (!dev) {
+            log.error(`Unknown device ${obj}.`);
+            return undefined;
+        }
+
+        let val = dev[key.trim()]; 
+        if (val === undefined){
+            log.error(`Property ${key} not found on ${obj}. ${JSON.stringify(dev)}`);
+            return false;
+        }
+
+        log.debug(`${obj}.${key} = ${val}`);
+        if (val === 'false' || !val){
+            return false;
+        }
+
+        let maybeTime = Times.toHoursAndMinutes(val + (adj || ''));
+        if (maybeTime) 
+            return maybeTime;
+
+        if (adj){
+            let adjNum = +adj.replace(/[^0-9]/g, '');
+            if (adj.startsWith('-')) adjNum = -adjNum;
+            val = val + adjNum;
+        }
+
+        return val;
+    }
+
+    _asTime(spec){
+        let match = spec.match(/^([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)([+-][0-9]+)?( *\| *[0-9]{2}:[0-9]{2})?$/);
+        if (match){
+            let [_, obj, key, adj, def] = match;
+            let val = this._getDeviceProp(`${obj}.${key}${adj || ''}`);
+            if (!val){ 
+                if (def){
+                    def = def.replace(/[^0-9:]/g, '');
+                    if (!/^[0-9]{2}:[0-9]{2}$/.test(def)){
+                        log.error(`Default value of ${def} is not a time.`);
+                    }
+
+                    return def;
+                }
+
+                return false;
+            }
+
+            if (!/[0-9]{2}:[0-9]{2}/.test(val)){
+                log.error(`Return value of ${dev}.${prop} is not a time: ${val}`);
+                return undefined;
+            }
+
+            return Times.toHoursAndMinutes(val);
+        }
+        else {
+            return Times.toHoursAndMinutes(spec);
+        }
     }
 
     _readFile(){
@@ -535,6 +590,7 @@ module.exports = class Scheduler {
                     log(`Turn ${schedule} ${spec} for trigger: ${trigger}.`);
                     await action(schedule, `schedule (${spec})`);
                     delete this.timers[`${schedule}_${spec}`];
+                    return true;
                 }
             }
             else log.debug(`Skipping check for ${schedule} because it has been overridden.`);

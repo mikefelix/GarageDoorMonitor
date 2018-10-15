@@ -7,17 +7,21 @@
         },
         "night": {
             "start": "sunset-30",
-            "end": "+03:00"
+            "end": "03:00"
         },
         "earlymorn": {
             "start": "03:00",
             "end": "07:30"
+        },
+        "sleepytime": {
+            "start": "22:30",
+            "end": "alarm.ringTimeToday | 10:00"
         }
     }, 
     "schedules":{
         "coffee": {
             "on": "alarm.time-10",
-            "off": "/30"
+            "off": "/30 & coffee.power < 500"
         },
         "piano": {
             "off": "~60"
@@ -59,13 +63,17 @@
             "off": "coffee.power > 500"
         },
         "bed": {
-            "on": "22:30 & owner.home & weather.temp < 60",
-            "off": "alarm.time | 10:00",
+            "on": "sleepytime & owner.home & weather.temp < 60",
+            "off": "!sleepytime",
             "cycle": "/540"
         },
         "grow": {
-            "on": "06:00",
-            "off": "18:00"
+            "on": "09:00",
+            "off": "21:00"
+        },
+        "tessel": {
+            "on": "!tessel.on",
+            "off": "garagedoor.offline"
         }
     }
 }

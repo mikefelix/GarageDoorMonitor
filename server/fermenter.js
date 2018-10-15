@@ -1,6 +1,6 @@
 let axios = require('axios'),
     format = require('./format.js'),
-    log = require('./log.js')('Garage', 4),
+    log = require('./log.js')('Fermenter', 4),
     qs = require('querystring'),
     timeout = require('./timeout.js');
 
@@ -18,7 +18,7 @@ module.exports = class Fermenter {
         return res.data;
     }
 
-    async get(){
+    async getState(){
         try {
             let data = await this._post('lcd');
             return {
@@ -50,10 +50,9 @@ module.exports = class Fermenter {
                 log.info('Enable heater: ' + JSON.stringify(res.data));
             }
             
-            let temp = parseFloat("" + temp);
+            temp = parseFloat("" + temp);
             log.info('Set beer to ' + temp);
             let res = await this._post(beer == 'beer' ? 'setBeer' : 'setFridge', temp);
-            log.info(res.data);
             return true;
         }
         catch (e){
