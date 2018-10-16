@@ -17,6 +17,7 @@ let http = require("http"),
     Thermostat = require('./thermostat.js'),
     Alarm = require('./alarm.js'),
     Fermenter = require('./fermenter.js'),
+    Devices = require('./devices.js'),
     Times = require('./sun_times.js');
 
 const config = JSON.parse(fs.readFileSync('./config.json'));
@@ -30,109 +31,18 @@ for (let key of ["port", "email", "tesselUrl", "authKey", "hueIp", "hueKey", "pu
 let logLevel = process.env.LOG_LEVEL || 3;
 let recentLambda = false;
 
-const bulbs = new Bulbs(
-    `http://${config.hueIp}/api/${config.hueKey}/lights`, 
-    [config.etekUser, config.etekPass, config.etekBaseUrl]
+const devices = new Devices(
+    new Bulbs(
+        `http://${config.hueIp}/api/${config.hueKey}/lights`, 
+        [config.etekUser, config.etekPass, config.etekBaseUrl]
+    ),
+    new Alarm(config.alarmAddress),
+    new Garage(config.tesselUrl),
+    new Thermostat(config.thermostatId, config.structureId, config.nestToken),
+    new Fermenter(config.fermenterUrl),
+    new Weather(config.weatherUrl),
+    new Scheduler('./schedules.json');
 );
-const alarm = new Alarm(config.alarmAddress});
-const therm = new Thermostat(
-        config.thermostatId,
-        config.structureId,
-        config.nestToken
-);
-const garage = new Garage(
-        config.tesselUrl,
-        () => bulbs.on('outside', 180, 'garage opened at night')
-);
-const weather = new Weather(config.weatherUrl);
-const scheduler = new Scheduler(
-    './schedules.json',
-    getSystemState,
-    turnOn,
-    turnOff
-);
-
-const fermenter = new Fermenter(config.fermenterUrl);
-
-let devices = { bulbs, alarm, therm, garage, weather, fermenter };
-
-function turnOn(name, reason){
-    log.debug(`turnOn ${name} because ${reason}`);
-    if (name == 'housefan')
-        return therm.set.bind(therm)('fan', 30);
-    else if (name == 'alarm')
-        return alarm.on.bind(alarm)();
-    else
-        return bulbs.on.bind(bulbs)(name, reason);
-}
-
-function turnOff(name, reason){
-    log(4, `turnOff ${name} because ${reason}`);
-    if (name == 'housefan')
-        //therm.set.bind(therm)('fan', 0) :
-        return () => {} 
-    else if (name == 'alarm')
-        return alarm.off.bind(alarm)();
-    else
-        return bulbs.off.bind(bulbs)(name, reason);
-}
-
-function getSystemState(){
-    let withTimeout = timeout(7000, null);
-    return Q.all([
-              withTimeout(therm.getState(), 'get therm state'), 
-              withTimeout(garage.getState(), 'get garage state'), 
-              withTimeout(bulbs.getState(), 'get bulb state'),
-              withTimeout(weather.get(), 'get weather state'),
-              withTimeout(alarm.getState(), 'get alarm state')
-          ]).then(states => {
-
-        let [thermState, garageState, bulbState, weatherState, alarmState] = states;
-        if (!thermState) thermState = {};
-
-        let state = {
-            away: thermState && thermState.away,
-            garage: garageState,
-            alarm: alarmState,
-            bulbs: bulbState,
-            hvac: {
-                humidity: thermState.humidity,
-                temp: thermState.temp,
-                target: thermState.target,
-                state: thermState.state,
-                mode: thermState.mode,
-                on: thermState.state == 'heating' || thermState.state == 'cooling'
-            },
-            housefan: {
-                on: thermState.on,
-                offTime: thermState.fanOffTime
-            },
-            weather: {
-                temp: weatherState ? weatherState.temp : undefined
-            },
-            times: Times.get(true)
-        };
-
-        let temp = state.hvac.temp, target = state.hvac.target;
-        if (state.hvac.mode == 'cool'){
-            state.hvac.nearTarget = (!weatherState || weatherState.temp >= 76) &&
-                temp >= target && 
-                temp - target <= 2;
-        }
-        else if (state.hvac.mode == 'heat'){
-            state.hvac.nearTarget = (!weatherState || weatherState.temp <= 50) &&
-                temp <= target && 
-                target - temp <= 2;
-        }
-        else {
-            state.hvac.nearTarget = false;
-        }
-
-        state.history = state.bulbs.history;
-        delete state.bulbs.history;
-        return state;
-    });
-}
 
 process.on('uncaughtException', function (err) {
     log.error(' uncaughtException: ' + err.message);
@@ -214,7 +124,7 @@ const routes = {
         if (!t) t = 'indefinitely';
 
         if (Times.get().isNight)
-            bulbs.on('outside', 180, 'garage opened at night');
+            devices.bulbs.on('outside', 180, 'garage opened at night');
 
         log.info(`Tessel reports opened ${t} state.`);
         //saveSnap(10);
@@ -254,19 +164,19 @@ const routes = {
         return await garage.getState();
     },
     'GET /state/weather': async () => {
-        return await weather.get();
+        return await weather.getState();
     },
     'GET /state/lights': async () => {
-        return await bulbs.getState();
+        return await devices.bulbs.getState();
     },
     'GET /state/lights/hue': async () => {
-        return await bulbs.getHueState();
+        return await devices.bulbs.getHueState();
     },
     'GET /state/lights/wemo': async () => {
-        return await bulbs.getWemoState();
+        return await devices.bulbs.getWemoState();
     },
     'GET /state/lights/etek': async () => {
-        return await bulbs.getEtekState();
+        return await devices.bulbs.getEtekState();
     },
     'GET /state/times': async () => {
         let times = Times.get(true);
@@ -282,7 +192,7 @@ const routes = {
     'GET /state': async () => {
         let state = {
             garage: await garage.getState(),
-            bulbs: await bulbs.getState(),
+            bulbs: await devices.bulbs.getState(),
             schedules: await scheduler.getSchedules(),
             thermostat: await therm.getState(),
             times: Times.get(true)
@@ -310,7 +220,7 @@ const routes = {
         if (Times.get().isNight){
             if (!recentLambda){
                 log(`IoT button pressed at night; turning on outside bulbs. ${date}`);
-                await bulbs.on('outside', 180, 'IoT button');
+                await devices.bulbs.on('outside', 180, 'IoT button');
                 recentLambda = true;
                 setTimeout(() => recentLambda = false, 60000);
             }
@@ -344,22 +254,22 @@ const routes = {
         action = action.replace('force', '');
 
         if (meth == 'GET')
-            return await bulbs.getBulb(device);
+            return await devices.bulbs.getBulb(device);
 
         if (meth == 'POST'){
             if (override){
                 if (scheduler.setOverride(device))
-                    bulbs.setOverride(device);
+                    devices.bulbs.setOverride(device);
             }
             
             if (action == 'revert'){
                 scheduler.removeOverride(device);
-                bulbs.removeOverride(device);
+                devices.bulbs.removeOverride(device);
                 await scheduler.check(device);
                 return true;
             }
             else {
-                return await bulbs[action].bind(bulbs)(device, 'triggered by user');
+                return await devices.bulbs[action].bind(devices.bulbs)(device, 'triggered by user');
             }
         }
     }

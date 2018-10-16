@@ -6,8 +6,7 @@ let Tessel = require('./tessel.js'),
     Times = require('./sun_times.js');
 
 module.exports = class Garage {
-    constructor(tesselUrl, onOpenAtNight){
-        this.onOpenAtNight = onOpenAtNight;
+    constructor(tesselUrl){
         this.tessel = new Tessel(tesselUrl);
     }
 
@@ -30,7 +29,7 @@ module.exports = class Garage {
     _call(action, time){
         if (Times.get().isNight){
             log(`Turning on outside lights during garage open.`);
-            this.onOpenAtNight();
+            if (this.fireEvent) this.fireEvent('garage opened at night');
         }
         
         return new Promise(async (resolve, reject) => {

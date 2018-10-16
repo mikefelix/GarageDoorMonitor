@@ -6,7 +6,7 @@ module.exports = class Weather {
         this.weatherUrl = weatherUrl;
     }
 
-    async get(prop, value){
+    async getState(prop, value){
         try {
             let res = await axios({ method: 'GET', url: this.weatherUrl });
             return res.data;
