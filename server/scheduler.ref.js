@@ -7,10 +7,10 @@ let format = require('./format.js'),
     Times = require('./sun_times.js');
 
 module.exports = class Scheduler {
-    constructor(file, getState, turnOn, turnOff, refresh){
+    constructor(file, devices){
         this.file = file;
         this._getState = async () => {
-            let state = await getState();
+            let state = await devices.getState.bind(devices)();
             let ret = state.bulbs;
             ret.housefan = state.housefan;
             ret.hvac = state.hvac;
@@ -21,8 +21,8 @@ module.exports = class Scheduler {
             log.debug(ret);
             return ret;
         };
-        this._turnOn = turnOn;
-        this._turnOff = turnOff;
+        this._turnOn = devices.on.bind(devices);
+        this._turnOff = devices.off.bind(devices);
         this._readFile();
         this.timers = {};
         this.checkAll();
@@ -93,7 +93,7 @@ module.exports = class Scheduler {
         if (!date) date = new Date();
         let schedule = this.schedules[name];
         if (!schedule) {
-            log.error(`Schedule ${name} not found.`);
+            log.info(`Schedule ${name} not found.`);
             return;
         }
 

@@ -40,9 +40,10 @@ const devices = new Devices(
     new Garage(config.tesselUrl),
     new Thermostat(config.thermostatId, config.structureId, config.nestToken),
     new Fermenter(config.fermenterUrl),
-    new Weather(config.weatherUrl),
-    new Scheduler('./schedules.json');
+    new Weather(config.weatherUrl)
 );
+
+const scheduler = new Scheduler('./schedules.json', devices);
 
 process.on('uncaughtException', function (err) {
     log.error(' uncaughtException: ' + err.message);
@@ -93,11 +94,11 @@ const routes = {
         log.error(Object.keys(request));
     },
     'POST /alarm/stop': async () => {
-        alarm.off();
+        devices.alarm.off();
         return 200;
     },
     'POST /alarm/go': async () => {
-        alarm.on();
+        devices.alarm.on();
         return 200;
     },
     'POST /alarm/(t?[0-9]+)/([0-9]+:[0-9]+|on|off)': async (request, days, set) => {
@@ -105,13 +106,13 @@ const routes = {
         days = days.replace(/[^0-9]/, '');
 
         if (set == 'on'){
-            alarm.enable(days, temp);
+            devices.alarm.enable(days, temp);
         }
         else if (set == 'off'){
-            alarm.disable(days, temp);
+            devices.alarm.disable(days, temp);
         }
         else {
-            alarm.setTime(set, days, temp);
+            devices.alarm.setTime(set, days, temp);
         }
         
         return 200;
@@ -137,10 +138,10 @@ const routes = {
     },
     'POST /close': async () => { // call from user
         log.info('Close command received.');
-        return await garage.close();
+        return await devices.garage.close();
     },
     'POST /open([0-9]*)': async (request, time) => { // call from user
-        return await garage.open(time, request.url);
+        return await devices.garage.open(time, request.url);
     },
     'POST /beer/([^/]+)/([0-9.]+)': async (request, setting, temp) => { 
         let drift = false;
@@ -149,22 +150,22 @@ const routes = {
             drift = true;
         }
 
-        return await fermenter.set(setting, temp, drift);
+        return await devices.fermenter.set(setting, temp, drift);
     },
     'GET /state/history': async () => {
         return true;
     },
     'GET /state/beer': async () => {
-        return await fermenter.getState();
+        return await devices.fermenter.getState();
     },
     'GET /state/alarm': async () => {
-        return await alarm.getState();
+        return await devices.alarm.getState();
     },
     'GET /state/garage': async () => {
-        return await garage.getState();
+        return await devices.garage.getState();
     },
     'GET /state/weather': async () => {
-        return await weather.getState();
+        return await devices.weather.getState();
     },
     'GET /state/lights': async () => {
         return await devices.bulbs.getState();
@@ -184,17 +185,17 @@ const routes = {
         return { times, schedules };
     },
     'GET /state/thermostat': async () => {
-        return await therm.getState();
+        return await devices.therm.getState();
     },
     'POST /state/thermostat': async () => {
-        return await therm.moveTemp1();
+        return await devices.therm.moveTemp1();
     },
     'GET /state': async () => {
         let state = {
-            garage: await garage.getState(),
+            garage: await devices.garage.getState(),
             bulbs: await devices.bulbs.getState(),
             schedules: await scheduler.getSchedules(),
-            thermostat: await therm.getState(),
+            thermostat: await devices.therm.getState(),
             times: Times.get(true)
         };
 
@@ -204,17 +205,17 @@ const routes = {
         return state;
     },
     'DELETE /therm/away': async () => {
-        return await therm.set('away', false);
+        return await devices.therm.set('away', false);
     },
     'PUT /therm/away': async () => {
-        return await therm.set('away', true);
+        return await devices.therm.set('away', true);
     },
     'POST /therm/temp([0-9]+)': async (request, temp) => {
-        return await therm.set('target_temperature_f', temp);
+        return await devices.therm.set('target_temperature_f', temp);
     },
     'POST /therm/fan([0-9]+)': async (request, duration) => {
         if (!duration) duration = 15;
-        return await therm.set('fan', duration);
+        return await devices.therm.set('fan', duration);
     },
     'POST /button/([0-9]+)': async (request, date) => { // Call from AWS Lambda
         if (Times.get().isNight){
@@ -226,13 +227,13 @@ const routes = {
             }
             else {
                 log(`IoT button pressed again at night; opening garage. ${date}`);
-                await garage.open(30, request.url);
+                await devices.garage.open(30, request.url);
                 recentLambda = false;
             }
         }
         else {
             log(`IoT button pressed in daytime; opening garage. ${date}`);
-            await garage.open(30, request.url);
+            await devices.garage.open(30, request.url);
         }
 
         return 202;
@@ -378,6 +379,5 @@ log(`Process started on ${config.port} at log level ${logLevel}. Times for today
 log('Current time is: ' + times.current);
 log('Sunrise time is: ' + times.sunrise);
 log('Sunset time is: ' + times.sunset);
-
 
 

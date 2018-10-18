@@ -64,8 +64,7 @@
         },
         "bed": {
             "on": "sleepytime & owner.home & weather.temp < 60",
-            "off": "!sleepytime",
-            "cycle": "/540"
+            "off": "!sleepytime | bed.power < 5"
         },
         "grow": {
             "on": "09:00",
