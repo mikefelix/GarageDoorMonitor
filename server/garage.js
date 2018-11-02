@@ -1,7 +1,7 @@
 let Tessel = require('./tessel.js'),
     exec = require('child_process').exec,
     format = require('./format.js'),
-    log = require('./log.js')('Garage', 4),
+    log = require('./log.js')('Garage'),
     timeout = require('./timeout.js'),
     Times = require('./sun_times.js');
 

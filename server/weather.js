@@ -1,5 +1,5 @@
 let axios = require("axios"),
-    log = require("./log.js")("Weather", 4);
+    log = require("./log.js")("Weather");
         
 module.exports = class Weather {
     constructor(weatherUrl){

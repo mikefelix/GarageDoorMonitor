@@ -15,5 +15,11 @@
     "weatherUrl": "https://mozzarelly.com/weather/current",
     "alarmAddress": "http://192.168.0.144:8000",
     "fermenterUrl": "https://mozzarelly.com/brewpi/socketmessage.php",
+    "tuyaDevices": [{
+        "ip": "192.168.0.150",
+        "id": "10670365bcddc2fa7def",
+        "key": "f865fbfb97d31681",
+        "switches": ["stereo", "charger"]
+    }],
     "logLevel": 2
 }

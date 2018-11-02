@@ -3,7 +3,7 @@ let http = require("http"),
     Q = require('q'),
     timeout = require('./timeout.js'),
     fs = require("fs"),
-    log = require("./log.js")("Main", 1),
+    log = require("./log.js")("Main"),
     format = require("./format.js"),
     path = require("path"),
     request = require('request'),
@@ -18,6 +18,7 @@ let http = require("http"),
     Alarm = require('./alarm.js'),
     Fermenter = require('./fermenter.js'),
     Devices = require('./devices.js'),
+    Tuya = require('./tuya.js'),
     Times = require('./sun_times.js');
 
 const config = JSON.parse(fs.readFileSync('./config.json'));
@@ -34,7 +35,8 @@ let recentLambda = false;
 const devices = new Devices(
     new Bulbs(
         `http://${config.hueIp}/api/${config.hueKey}/lights`, 
-        [config.etekUser, config.etekPass, config.etekBaseUrl]
+        [config.etekUser, config.etekPass, config.etekBaseUrl],
+        config.tuyaDevices
     ),
     new Alarm(config.alarmAddress),
     new Garage(config.tesselUrl),
@@ -138,10 +140,10 @@ const routes = {
     },
     'POST /close': async () => { // call from user
         log.info('Close command received.');
-        return await devices.garage.close();
+        return await devices.garagedoor.close();
     },
     'POST /open([0-9]*)': async (request, time) => { // call from user
-        return await devices.garage.open(time, request.url);
+        return await devices.garagedoor.open(time, request.url);
     },
     'POST /beer/([^/]+)/([0-9.]+)': async (request, setting, temp) => { 
         let drift = false;
@@ -161,8 +163,8 @@ const routes = {
     'GET /state/alarm': async () => {
         return await devices.alarm.getState();
     },
-    'GET /state/garage': async () => {
-        return await devices.garage.getState();
+    'GET /state/garagedoor': async () => {
+        return await devices.garagedoor.getState();
     },
     'GET /state/weather': async () => {
         return await devices.weather.getState();
@@ -192,7 +194,7 @@ const routes = {
     },
     'GET /state': async () => {
         let state = {
-            garage: await devices.garage.getState(),
+            garagedoor: await devices.garagedoor.getState(),
             bulbs: await devices.bulbs.getState(),
             schedules: await scheduler.getSchedules(),
             thermostat: await devices.therm.getState(),
@@ -227,13 +229,13 @@ const routes = {
             }
             else {
                 log(`IoT button pressed again at night; opening garage. ${date}`);
-                await devices.garage.open(30, request.url);
+                await devices.garagedoor.open(30, request.url);
                 recentLambda = false;
             }
         }
         else {
             log(`IoT button pressed in daytime; opening garage. ${date}`);
-            await devices.garage.open(30, request.url);
+            await devices.garagedoor.open(30, request.url);
         }
 
         return 202;

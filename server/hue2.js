@@ -1,5 +1,5 @@
 let format = require('./format.js'),
-    log = require('./log.js')('Hue', false),
+    log = require('./log.js')('Hue'),
     Q = require('q'),
     HyperRequest = require('hyper-request');
 

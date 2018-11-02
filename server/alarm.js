@@ -1,7 +1,7 @@
 var axios = require('axios'),
     fs = require('fs'),
     format = require('./format.js'),
-    log = require('./log.js')('Alarm', 2);
+    log = require('./log.js')('Alarm');
 
 module.exports = class Alarm {
     constructor(address){
@@ -53,9 +53,15 @@ module.exports = class Alarm {
     }
 
     timeToTrigger(){
+        /*
         if (this.hasTriggeredToday()){
             return false;
         }
+
+        if (this.config.override && this.config.override.days > 0){
+            return false;
+        }
+        */
 
         if (this.config.override && this.config.override.time){
             return this.config.override.time;

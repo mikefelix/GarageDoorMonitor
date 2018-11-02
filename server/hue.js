@@ -1,6 +1,6 @@
 let {get, put} = require('request'),
     format = require('./format.js'),
-    log = require('./log.js')('Hue', 4),
+    log = require('./log.js')('Hue'),
     Q = require('q');
 
 module.exports = class Hue {

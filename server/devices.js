@@ -10,13 +10,13 @@ const Garage = require('./garage.js'),
       log = require('./log.js')('Devices');
 
 module.exports = class Devices {
-    constructor(bulbs, alarm, garage, therm, fermenter, weather){
+    constructor(bulbs, alarm, garagedoor, therm, fermenter, weather){
         this.bulbs = bulbs;
         this.bulbs.fireEvent = this.eventFired.bind(this);
         this.alarm = alarm;
         this.alarm.fireEvent = this.eventFired.bind(this);
-        this.garage = garage;
-        this.garage.fireEvent = this.eventFired.bind(this);
+        this.garagedoor = garagedoor;
+        this.garagedoor.fireEvent = this.eventFired.bind(this);
         this.therm = therm;
         this.therm.fireEvent = this.eventFired.bind(this);
         this.fermenter = fermenter;
@@ -56,7 +56,7 @@ module.exports = class Devices {
     }
 
     getState(){
-        let promises = ['therm', 'garage', 'bulbs', 'weather', 'alarm']
+        let promises = ['therm', 'garagedoor', 'bulbs', 'weather', 'alarm']
             .map(name => this.getDeviceState(name));
         return Q.all(promises).then(states => {
             let [thermState, garageState, bulbState, weatherState, alarmState] = states;
@@ -64,7 +64,7 @@ module.exports = class Devices {
 
             let state = {
                 away: thermState && thermState.away,
-                garage: garageState,
+                garagedoor: garageState,
                 alarm: alarmState,
                 bulbs: bulbState,
                 hvac: {

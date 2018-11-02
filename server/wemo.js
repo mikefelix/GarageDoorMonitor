@@ -1,5 +1,5 @@
 const WemoClient = require('wemo-client'),
-      log = require('./log.js')('Wemo', 4),
+      log = require('./log.js')('Wemo'),
       Q = require('q'),
       timeout = require('./timeout.js'),
       wemo = new WemoClient();
@@ -9,7 +9,7 @@ module.exports = class Wemo {
         this.clients = {};
         this.bulbs = bulbs;
         wemo.discover(info => {
-            log(1, 'on startup, discovered ' + info.friendlyName);
+            log.debug('on startup, discovered ' + info.friendlyName);
             let client = wemo.client(info);
             this.clients[info.friendlyName] = client;
         });
@@ -22,18 +22,18 @@ module.exports = class Wemo {
         for (let i = 0; i < this.bulbs.length; i++){
             let bulb = this.bulbs[i];
             try {
-                log(`Get state for ${bulb}.`);
+                log.debug(`Get state for ${bulb}.`);
                 promises.push(promiseTimer(this.getBulbState(bulb), 'get bulb ' + bulb));
             }
             catch (e){
-                log(1, `Error getting wemo state for bulb ${bulb}`);
+                log.error(`Error getting wemo state for bulb ${bulb}`);
             }
         }
 
         return Q.all(promises).then(states => {
             let totalState = {};
             for (let i = 0; i < this.bulbs.length; i++){
-                log(`State for ${this.bulbs[i]} is ${states[i]}.`);
+                log.debug(`State for ${this.bulbs[i]} is ${states[i]}.`);
                 totalState[this.bulbs[i]] = states[i];
             }
 
@@ -64,10 +64,10 @@ module.exports = class Wemo {
     }
     
     async _changeState(name, newState, retrying){
-        log(`Change ${name} to ${newState}${retrying ? ' (retrying)' : ''}.`);
+        log.debug(`Change ${name} to ${newState}${retrying ? ' (retrying)' : ''}.`);
         try {
             let client = await this._getClient(name);
-            log('Client found for ' + name + ': '); 
+            log.debug('Client found for ' + name + ': '); 
             return await this._setClientState(client, newState);
         }
         catch (err) {
@@ -75,14 +75,14 @@ module.exports = class Wemo {
                 throw err;
             }
             else {
-                log('Retrying changeState:', name);
+                log.info('Retrying changeState:', name);
                 return await this._changeState(name, newState, true);
             }
         }
     }
 
     _getClient(name, forceDiscover){
-        log(`wemo: get client for ${name}`);
+        log.trace(`wemo: get client for ${name}`);
         return new Promise((resolve, reject) => {
             name = name.substring(0, 1).toUpperCase() + name.substring(1);
             //forceDiscover = true; // TODO: needed?
@@ -98,7 +98,7 @@ module.exports = class Wemo {
                     wemo.discover(deviceInfo => {
                         try {
                             if (deviceInfo){
-                                log(5, `Wemo device ${deviceInfo.friendlyName} is at ${deviceInfo.host}:${deviceInfo.port}`);
+                                log.trace(`Wemo device ${deviceInfo.friendlyName} is at ${deviceInfo.host}:${deviceInfo.port}`);
 
                                 if (deviceInfo.friendlyName == name){
                                     this.clients[name] = wemo.client(deviceInfo);
@@ -106,17 +106,17 @@ module.exports = class Wemo {
                                 }
                             }
                             else 
-                                log('No device info?');
+                                log.warn('No device info?');
                         }
                         catch (e){
-                            log(1, "Can't discover devices: " + e);
+                            log.error("Cab't discover devices: " + e);
                             reject(e);
                         }
                     });
                 }
                 catch (e) {
-                    log(1, `Failed to discover Wemo devices.`);
-                    log(1, e);
+                    log.error(`Failed to discover Wemo devices.`);
+                    log.error(e);
                 }
             }
         });
@@ -144,28 +144,28 @@ module.exports = class Wemo {
                 client.getBinaryState((err, state) => {
                     state = state === 1 || state === '1' || state === true;
                     if (err) {
-                        log(1, "Error getting wemo state: " + err);
+                        log.error("Error getting wemo state: " + err);
                         reject(err);
                     }
                     else if (newState === undefined){
-                        log("Toggling state from " + state + ".");
+                        log.debug("Toggling state from " + state + ".");
                         client.setBinaryState(state ? 0 : 1);
                         resolve(true);
                     }
                     else if (state != !!newState){
-                        log("Setting to state " + newState + ".");
+                        log.debug("Setting to state " + newState + ".");
                         client.setBinaryState(newState ? 1 : 0);
                         resolve(true);
                     }
                     else {
-                        log("Was already in state " + state + ".");
+                        log.debug("Was already in state " + state + ".");
                         //resolve(false);
                         resolve(true);
                     }
                 });
             }
             catch (e) {
-                log(1, "Can't communicate with Wemo: " + e);
+                log.error("Can't communicate with Wemo: " + e);
                 reject(e);
             }
         });

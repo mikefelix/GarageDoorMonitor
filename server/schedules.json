@@ -30,7 +30,7 @@
             "off": "/1"
         },
         "outside": {
-            "off": "/3"
+            "off": "/5"
         },
         "fan": {
             "off": "/60"
@@ -60,7 +60,7 @@
         },
         "alarm": {
             "on": "alarm.time",
-            "off": "coffee.power > 500"
+            "off": "coffee.power > 500 | /60"
         },
         "bed": {
             "on": "sleepytime & owner.home & weather.temp < 60",
@@ -73,6 +73,9 @@
         "tessel": {
             "on": "!tessel.on",
             "off": "garagedoor.offline"
+        },
+        "charger": {
+            "on": "21:00"
         }
     }
 }

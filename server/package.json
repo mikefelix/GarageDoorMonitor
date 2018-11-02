@@ -13,6 +13,7 @@
     "querystring": "^0.2.0",
     "request": "~2.72.0",
     "suncalc": "^1.8.0",
+    "tuyapi": "github:codetheweb/tuyapi",
     "wemo-client": "^0.11.2"
   },
   "devDependencies": {},

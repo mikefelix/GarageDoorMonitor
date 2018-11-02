@@ -3,7 +3,7 @@ let format = require('./format.js'),
     util = require('util'),
     exec = util.promisify(require('child_process').exec);
     fs = require('fs'),
-    log = require('./log.js')('Scheduler', 3),
+    log = require('./log.js')('Scheduler'),
     Times = require('./sun_times.js');
 
 module.exports = class Scheduler {
@@ -40,7 +40,7 @@ module.exports = class Scheduler {
         ret.alarm = state.alarm;
         ret.owner = {home: !state.away};
         ret.weather = state.weather;
-        ret.garagedoor = state.garage;
+        ret.garagedoor = state.garagedoor;
         log.debug(ret);
         return ret;
     };
@@ -497,7 +497,6 @@ module.exports = class Scheduler {
             }
         }
 
-        log.warn('Falling back to deprecated default parse: ' + trigger + '.');
         if (/^[A-Za-z0-9_]+$/.test(trigger)){
             return async (device) => {
                 if (/^[0-9]+$/.test(trigger)){

@@ -1,6 +1,6 @@
 let suncalc = require("suncalc"),
     moment = require('moment-timezone'),
-    log = require('./log.js')("Times", 4),
+    log = require('./log.js')("Times"),
     format = require('./format.js');
 
 function get(formatted){

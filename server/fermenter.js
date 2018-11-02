@@ -1,6 +1,6 @@
 let axios = require('axios'),
     format = require('./format.js'),
-    log = require('./log.js')('Fermenter', 4),
+    log = require('./log.js')('Fermenter'),
     qs = require('querystring'),
     timeout = require('./timeout.js');
 
@@ -23,16 +23,27 @@ module.exports = class Fermenter {
             let data = await this._post('lcd');
             return {
                 mode: data[0].substring(7).replace('Const.', 'constant'),
-                beerTemp: +data[1].substring(7, 11), 
-                beerSetting: +data[1].substring(13, 17),
-                fridgeTemp: +data[2].substring(7, 11), 
-                fridgeSetting: +data[1].substring(13, 17),
-                state: data[3].replace('/ +/', ' ').replace(/([0-9+])h([0-9]+)m[0-9]+/, '$1:$2')
+                beerTemp: data[1].substring(7, 11), 
+                beerSetting: data[1].substring(13, 17),
+                fridgeTemp: data[2].substring(7, 11), 
+                fridgeSetting: data[2].substring(13, 17),
+                state: data[3].replace(/\s+/g, ' ').replace(/([0-9+])h([0-9]+)m[0-9]+/, '$1:$2')
             };
         }
         catch (e){
             log.error('Could not communicate with fermenter: ' + e);
             return {};
+        }
+    }
+
+    async off(){
+        try {
+            let res = await this._post('setOff');
+            return true;
+        }
+        catch (e){
+            log.error('Could not turn off fermenter.' + e);
+            return false;
         }
     }
 
@@ -47,7 +58,7 @@ module.exports = class Fermenter {
             }
             else { // enable heater
                 let res = await this._post('applyDevice', '%7B%22i%22%3A%222%22%2C%22c%22%3A%221%22%2C%22b%22%3A%220%22%2C%22f%22%3A%222%22%2C%22h%22%3A%221%22%2C%22p%22%3A%222%22%2C%22x%22%3A%220%22%7D');
-                log.info('Enable heater: ' + JSON.stringify(res.data));
+                log.info('Enable heater: ' + JSON.stringify(res));
             }
             
             temp = parseFloat("" + temp);

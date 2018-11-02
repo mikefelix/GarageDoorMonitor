@@ -15,13 +15,7 @@ producer.on('error', (err) => {
     console.log(`Error! ${err}`);
 });
 
-module.exports = function(segment, defaultLevel){
-    if (defaultLevel === false)
-        return () => {};
-
-    if (!defaultLevel)
-        defaultLevel = 3;
-
+module.exports = function(segment, filterLevel){
     let dateFormat = 'MM/DD h:mm:ssa';
 
     const logIt = function() {
@@ -31,7 +25,7 @@ module.exports = function(segment, defaultLevel){
             msg = arguments[1];
         }
         else {
-            level = defaultLevel;
+            level = 3;
             msg = arguments[0];
         }
 
@@ -44,7 +38,7 @@ module.exports = function(segment, defaultLevel){
         for (let i = prefix.length; i < pad; i++) 
             padding += ' ';
 
-        let filterLevel = process.env.LOG_LEVEL || 3;
+        filterLevel = filterLevel || process.env.LOG_LEVEL || 3;
         if (filterLevel >= level)
             console.log(`${prefix}:${padding}${msg}`);
 
@@ -63,6 +57,7 @@ module.exports = function(segment, defaultLevel){
     logIt.info = function(msg) { return logIt(3, msg); };
     logIt.debug = function(msg) { return logIt(4, msg); };
     logIt.trace = function(msg) { return logIt(5, msg); };
+    logIt.setLevel = function(level) { filterLevel = level; };
 
     return logIt;
 }

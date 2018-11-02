@@ -1,11 +1,11 @@
 let {get, put} = require('request'),
     EtekClient = require('./etek-client.js'),
-    log = require('./log.js')('Etek', 4),
+    log = require('./log.js')('Etek'),
     Q = require('q');
 
 module.exports = class Etek {
     constructor(login, password, baseUrl, bulbs, meterBulbs){
-        log(4, `Etek starting with ${login}/${password}/${baseUrl}`);
+        log.debug(`Etek starting with ${login}/${password}/${baseUrl}`);
         this.client = new EtekClient(login, password, baseUrl);
         this.bulbs = bulbs;
         this.meterBulbs = meterBulbs;
@@ -20,7 +20,7 @@ module.exports = class Etek {
                 if (this.bulbs.indexOf(device.name) >= 0){
                     let meter;
                     if (this.meterBulbs.indexOf(device.name) >= 0){
-                        log(`get meter: ${device.id}`);
+                        log.debug(`get meter: ${device.id}`);
                         meter = await this.client.getMeter(device.id);
                     }
 
@@ -34,7 +34,7 @@ module.exports = class Etek {
             return result;
         }
         catch (e){
-            log(1, `Can't connect to etek. ${e}`);
+            log.error(`Can't connect to etek. ${e}`);
             return {};
         }
     }
@@ -46,7 +46,7 @@ module.exports = class Etek {
             return meter.power;
         }
         catch (e){
-            log(1, `Can't connect to etek for meter. ${e}`);
+            log.error(`Can't connect to etek for meter. ${e}`);
             return 0;
         }
     }
@@ -61,7 +61,7 @@ module.exports = class Etek {
             };
         }
         catch (e){
-            log(1, `Can't connect to etek for device ${name}. ${e}`);
+            log.error(`Can't connect to etek for device ${name}. ${e}`);
             return {};
         }
     }
@@ -70,20 +70,20 @@ module.exports = class Etek {
         try {
             let device = await this.client.getDevice(name);
             if (device.on) {
-                log(`Toggling device ${device.name} (${device.id}) off.`);
+                log.debug(`Toggling device ${device.name} (${device.id}) off.`);
                 let state = await this.client.turnOff(device.id);
-                log(`Toggled off. New state is ${state.on}.`);
+                log.debug(`Toggled off. New state is ${state.on}.`);
                 return true;
             }
             else {
-                log(`Toggling device ${device.name} (${device.id}) on.`);
+                log.info(`Toggling device ${device.name} (${device.id}) on.`);
                 let state = await this.client.turnOn(device.id);
-                log(`Toggled on. New state is ${state.on}.`);
+                log.debug(`Toggled on. New state is ${state.on}.`);
                 return true;
             }
         } 
         catch (e){
-            log(1, `Can't connect to toggle device ${name}. ${e}`);
+            log.error(`Can't connect to toggle device ${name}. ${e}`);
             return false;
         }
     }
@@ -91,12 +91,12 @@ module.exports = class Etek {
     async on(name, timeout) {
         try {
             let device = await this.client.getDevice(name);
-            log(`Turning device ${device.name} (${device.id}) on.`);
+            log.info(`Turning device ${device.name} (${device.id}) on.`);
             await this.client.turnOn(device.id);
             return true;
         } 
         catch (e){
-            log(1, `Can't connect to toggle device ${name}. ${e}`);
+            log.error(`Can't connect to toggle device ${name}. ${e}`);
             return false;
         }
     }
@@ -104,12 +104,12 @@ module.exports = class Etek {
     async off(name) {
         try {
             let device = await this.client.getDevice(name);
-            log(`Turning device ${device.name} (${device.id}) off.`);
+            log.info(`Turning device ${device.name} (${device.id}) off.`);
             await this.client.turnOff(device.id);
             return true;
         } 
         catch (e){
-            log(1, `Can't connect to toggle device ${name}. ${e}`);
+            log.error(`Can't connect to toggle device ${name}. ${e}`);
             return false;
         }
     }

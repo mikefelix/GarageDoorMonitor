@@ -1,5 +1,5 @@
 let FormData = require('form-data'),
-    log = require('./log.js')('Etek-client', 5);
+    log = require('./log.js')('Etek-client');
 
 module.exports = class EtekCityClient {
     constructor(username, password, baseUrl) {
@@ -35,7 +35,7 @@ module.exports = class EtekCityClient {
         formData.append('AppVersionCode', '111');
         formData.append('OS', 'Android');
         formData.append('DevToken', 'AkuEZmg_eu5m14eQRDxqYBsUzR-I7ZjaQtmKvU5Mw5a2');
-        log('POST /login');
+        log.debug('POST /login');
         try {
             let response = await this.client.post('/login', {
                 headers: Object.assign({
@@ -47,11 +47,11 @@ module.exports = class EtekCityClient {
             
             this.token = response.tk;
             this.uniqueId = response.id;
-            log(`Logged into vesync with ${this.uniqueId}/${this.token}`);
+            log.debug(`Logged into vesync with ${this.uniqueId}/${this.token}`);
             return true;
         }
         catch (err){
-            log(1, 'Login error: ' + err);
+            log.error(1, 'Login error: ' + err);
             return false;
         }
     }
@@ -68,9 +68,9 @@ module.exports = class EtekCityClient {
     async getDevices(){
         try {
             if (!this.token){
-                log('Logging in...');
+                log.debug('Logging in...');
                 if (!await this.logIn()){ 
-                    log(1, 'Login failed.');
+                    log.error('Login failed.');
                     return {};
                 }
             }
@@ -82,12 +82,12 @@ module.exports = class EtekCityClient {
                 }
             });
             
-            response.devices.map(device => log(`device ${device.deviceName} is ${device.id}`));
+            response.devices.map(device => log.debug(`device ${device.deviceName} is ${device.id}`));
             return response.devices
                 .map(device => this._transformResponse(device));
         }
         catch (err){
-            log(1, 'getDevices error: ' + err);
+            log.error('getDevices error: ' + err);
             return {};
         }
     }
@@ -95,9 +95,9 @@ module.exports = class EtekCityClient {
     async getDevice(name){
         try {
             if (!this.token){
-                log('Logging in...');
+                log.debug('Logging in...');
                 if (!await this.logIn()){ 
-                    log('Login failed.');
+                    log.error('Login failed.');
                     return undefined;
                 }
             }
@@ -109,13 +109,13 @@ module.exports = class EtekCityClient {
                 }
             });
             
-            response.devices.map(device => log(`device ${name} is ${device.id}`));
+            response.devices.map(device => log.debug(`device ${name} is ${device.id}`));
             return response.devices
                 .filter(device => device.deviceName == name)
                 .map(device => this._transformResponse(device))[0];
         }
         catch (err){
-            log(1, 'getDevice error: ' + err);
+            log.error('getDevice error: ' + err);
             return undefined;
         }
     }
@@ -128,7 +128,7 @@ module.exports = class EtekCityClient {
         formData.append('action', 'open');
 
         try {
-            log(`curl -X POST https://server1.vesync.com:4007/devRequest -H "tk: ${this.token}" -H "id: ${this.uniqueId}" -H "uniqueId: ${this.uniqueId}" --data "cid=${deviceId}&uri=/relay&action=open"`);
+            log.debug(`curl -X POST https://server1.vesync.com:4007/devRequest -H "tk: ${this.token}" -H "id: ${this.uniqueId}" -H "uniqueId: ${this.uniqueId}" --data "cid=${deviceId}&uri=/relay&action=open"`);
             let response = await this.client.post('/devRequest', {
                 headers: Object.assign({
                     tk: this.token,
@@ -143,12 +143,12 @@ module.exports = class EtekCityClient {
                 }
             });
             
-            log('POST complete.');
+            log.debug('POST complete.');
 
             return this._transformResponse(response);
         }
         catch (err){
-            log(1, 'turnOn error: ' + err);
+            log.error('turnOn error: ' + err);
         }
     }
 
@@ -160,7 +160,7 @@ module.exports = class EtekCityClient {
         formData.append('action', 'break');
 
         try {
-            log(`curl -X POST https://server1.vesync.com:4007/devRequest -H "tk: ${this.token}" -H "id: ${this.uniqueId}" -H "uniqueId: ${this.uniqueId}" --data "cid=${deviceId}&uri=/relay&action=break"`);
+            log.debug(`curl -X POST https://server1.vesync.com:4007/devRequest -H "tk: ${this.token}" -H "id: ${this.uniqueId}" -H "uniqueId: ${this.uniqueId}" --data "cid=${deviceId}&uri=/relay&action=break"`);
             let response = await this.client.post('/devRequest', {
                 headers: Object.assign({
                     tk: this.token,
@@ -175,12 +175,12 @@ module.exports = class EtekCityClient {
                 }
             });
 
-            log('POST complete.');
+            log.debug('POST complete.');
 
             return this._transformResponse(response);
         }
         catch (err){
-            log(1, 'turnOff error: ' + err);
+            log.error('turnOff error: ' + err);
         }
     }
 

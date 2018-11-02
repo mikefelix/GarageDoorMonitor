@@ -1,8 +1,9 @@
 let Hue = require('./hue.js'),
     Wemo = require('./wemo.js'),
     Etek = require('./etek.js'),
+    Tuya = require('./tuya.js'),
     Q = require('q'),
-    log = require('./log.js')('Bulbs', 2),
+    log = require('./log.js')('Bulbs'),
     timeout = require('./timeout.js'),
     format = require('./format.js');
 
@@ -11,19 +12,20 @@ let doAfterSeconds = (after, doThis) => {
 }
 
 module.exports = class Bulbs {
-    constructor(hueAddress, etekCreds){
+    constructor(hueAddress, etekCreds, tuyaConfig){
         this.wemoBulbs = ['fan', 'vent', 'lamp'];
-        this.etekBulbs = ['coffee', 'tessel', 'wine', 'stereo', 'aquarium', 'office', 'bed', 'grow'];
+        this.etekBulbs = ['coffee', 'tessel', 'wine', 'piano', 'aquarium', 'bed', 'grow', 'office'];
         this.hueBulbs = {
             garage: [1],
             breezeway: [2],
             driveway: [3,4],
             outside: ['garage','breezeway']
         };
-
+        this.tuyaBulbs = ['charger', 'stereo'];
+        this.tuya = new Tuya(tuyaConfig || []);
         this.hue = new Hue(hueAddress, this.hueBulbs);
         this.wemo = new Wemo(this.wemoBulbs);
-        this.etek = new Etek(etekCreds[0], etekCreds[1], etekCreds[2], this.etekBulbs, ['coffee', 'bed']);
+        this.etek = new Etek(etekCreds[0], etekCreds[1], etekCreds[2], this.etekBulbs, ['coffee', 'bed', 'piano']);
         this.history = {};
         this.overrides = {};
 
@@ -36,6 +38,10 @@ module.exports = class Bulbs {
         }
 
         for (let bulb of this.wemoBulbs){
+            this.history[bulb] = {};
+        }
+
+        for (let bulb of this.tuyaBulbs){
             this.history[bulb] = {};
         }
     }
@@ -51,7 +57,7 @@ module.exports = class Bulbs {
     async getBulb(name){
         try {
             let handler = this._getHandler(name);
-            log(4, `Get bulb ${name}`);
+            log.debug(`Get bulb ${name}`);
             let state = await handler.getBulbState(name);
 
             let ret = {
@@ -64,7 +70,7 @@ module.exports = class Bulbs {
             return ret;
         }
         catch (e){
-            log(1, `Couldn't get state for bulb ${name}: ${e}`);
+            log.error(`Couldn't get state for bulb ${name}: ${e}`);
             return false;
         }
     }
@@ -87,22 +93,25 @@ module.exports = class Bulbs {
     async getHueState() { return await this.hue.getState(); }
     async getWemoState() { return await this.wemo.getState(); }
     async getEtekState() { return await this.etek.getState(); }
+    async getTuyaState() { return await this.tuya.getState(); }
 
     getState(){
         let promiseTimer = timeout(6000, null);
         let getHue = promiseTimer(this.hue.getState(), 'get hue state');
         let getWemo = promiseTimer(this.wemo.getState(), 'get wemo state'); 
         let getEtek = promiseTimer(this.etek.getState(), 'get etek state');
+        let getTuya = promiseTimer(this.tuya.getState(), 'get tuya state');
 
-        return Q.all([getHue, getWemo, getEtek]).then(states => {
-            let [hueState, wemoState, etekState] = states;
+        return Q.all([getHue, getWemo, getEtek, getTuya]).then(states => {
+            let [hueState, wemoState, etekState, tuyaState] = states;
             let state = {};
             if (wemoState) state = Object.assign(state, wemoState);
             if (hueState) state = Object.assign(state, hueState);
             if (etekState) state = Object.assign(state, etekState);
+            if (tuyaState) state = Object.assign(state, tuyaState);
             state.history = this.history;
             for (let override in this.overrides){
-                if (this.overrides[override]){
+                if (state[override] && this.overrides[override]){
                     state[override].overridden = true;
                 }
             }
@@ -122,6 +131,8 @@ module.exports = class Bulbs {
             return this.wemo;
         else if (this.etekBulbs.indexOf(name.toLowerCase()) >= 0)
             return this.etek;
+        else if (this.tuyaBulbs.indexOf(name.toLowerCase()) >= 0)
+            return this.tuya;
         else 
             throw 'Unknown bulb ' + name;
     }
@@ -136,6 +147,10 @@ module.exports = class Bulbs {
 
     _isEtek(name){
         return this.etekBulbs.indexOf(name.toLowerCase()) >= 0;
+    }
+
+    _isTuya(name){
+        return this.tuyaBulbs.indexOf(name.toLowerCase()) >= 0;
     }
 
     _getSource(args){
@@ -201,7 +216,7 @@ module.exports = class Bulbs {
                 await act.call(handler, bulbName);
                 log.trace(`Made call. Checking result.`);
                 currentState = await handler.getBulbState(bulbName);
-                if (currentState.on != expectedState)
+                if (currentState.on !== expectedState)
                     log.debug(`Retrying because new state is ${currentState.on} instead of ${expectedState}.`);
             }
             while (tried < 10 && expectedState != currentState.on);

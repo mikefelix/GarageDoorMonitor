@@ -1,5 +1,5 @@
 var request = require('request'),
-    log = require('./log.js')('Tessel', 4);
+    log = require('./log.js')('Tessel');
 
 module.exports = class Tessel {
     constructor(address){

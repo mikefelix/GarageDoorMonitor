@@ -22,7 +22,7 @@ module.exports = function(ms, defaultVal){
                 clearTimeout(id);
                 let msg = `Promise timed out${action ? ' (' + action + ')' : ''}.`;
                 if (defaultVal !== undefined){
-                    log(2, msg);
+                    log.warn(msg);
                     resolve(defaultVal);
                 }
                 else {
@@ -35,7 +35,7 @@ module.exports = function(ms, defaultVal){
             promise.then(d => { 
                 let end = new Date();
                 clearTimeout(id);
-                log(5, `${action || 'Promise'} completed in ${end.getTime() - start.getTime()} millis.`);
+                log.debug(`${action || 'Promise'} completed in ${end.getTime() - start.getTime()} millis.`);
                 return d;
             }),
             timeoutPromise
