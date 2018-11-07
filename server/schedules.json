@@ -24,7 +24,7 @@
             "off": "/30 & coffee.power < 500"
         },
         "piano": {
-            "off": "~60"
+            "off": "1~60"
         },
         "driveway": {
             "off": "/1"
@@ -76,6 +76,9 @@
         },
         "charger": {
             "on": "21:00"
+        },
+        "stereo": {
+            "off": "!owner.home"
         }
     }
 }

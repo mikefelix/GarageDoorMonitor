@@ -76,7 +76,7 @@ module.exports = class Etek {
                 return true;
             }
             else {
-                log.info(`Toggling device ${device.name} (${device.id}) on.`);
+                log.debug(`Toggling device ${device.name} (${device.id}) on.`);
                 let state = await this.client.turnOn(device.id);
                 log.debug(`Toggled on. New state is ${state.on}.`);
                 return true;
@@ -91,7 +91,7 @@ module.exports = class Etek {
     async on(name, timeout) {
         try {
             let device = await this.client.getDevice(name);
-            log.info(`Turning device ${device.name} (${device.id}) on.`);
+            log.debug(`Turning device ${device.name} (${device.id}) on.`);
             await this.client.turnOn(device.id);
             return true;
         } 
@@ -104,7 +104,7 @@ module.exports = class Etek {
     async off(name) {
         try {
             let device = await this.client.getDevice(name);
-            log.info(`Turning device ${device.name} (${device.id}) off.`);
+            log.debug(`Turning device ${device.name} (${device.id}) off.`);
             await this.client.turnOff(device.id);
             return true;
         } 

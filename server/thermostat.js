@@ -77,7 +77,7 @@ module.exports = class Thermostat {
     }
 
     _trimThermResponse(res){
-        if (!res || !res.data) return undefined;
+        if (!res || !res.data) return {};
         let data = res.data;
         if (!data)
             throw 'No data found in response.';
@@ -127,7 +127,7 @@ module.exports = class Thermostat {
 
             let method = data ? 'PUT' : 'GET';
 
-            //if (method != 'GET') log(`${method} to ${url} with data: ${JSON.stringify(data)}`);
+            log.debug(`${method} to ${url} with data: ${JSON.stringify(data)} and auth: ${auth}`);
             let res = await axios({ method, url, data, headers: {
                     'Authorization': auth,
                     'Content-type': 'application/json'

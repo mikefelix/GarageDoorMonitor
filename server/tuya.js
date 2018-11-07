@@ -62,37 +62,44 @@ module.exports = class Tuya {
         }
     }
 
-    getBulbState(name) {
-        let device = this.switches[name].device;
-        if (!device) throw 'Unknown device ' + name;
+    async getBulbState(name) {
+        let swit = this.switches[name];
+        if (!swit) throw 'Unknown device ' + name;
 
-        return device.get({schema: true})
-            .then(status => { 
-                return {on: status.dps[device.index]}; 
-            })
-            .catch(e => { log.error('Error retrieving state: ' + e); return {} } );
+        try {
+            let status = await swit.device.get({schema: true});
+            log.debug(`Got device status ${JSON.stringify(status)}.`);
+            let res = {on: status.dps[swit.index]}; 
+            log.debug(`Returning ${JSON.stringify(res)}`);
+            return res;
+        }
+        catch (e) { 
+            log.error('Error retrieving state: ' + e);
+            return {error: e};
+        }
     }
     
-    async _handle(name, setting, timeout) {
+    async _set(name, setting, timeout) {
         try {
-            let device = this.switches[name].device;
-            if (!device) throw 'Unknown device ' + name;
+            let swit = this.switches[name];
+            if (!swit) throw 'Unknown device ' + name;
 
             if (setting === undefined){
-                setting = !(await device.get({dps: device.index}));
+                setting = !(await swit.device.get({dps: swit.index}));
             }
 
-            log.info(`Turn ${setting ? 'on' : 'off'} ${name} at ${device.index}.`); 
-            await device.set({dps: device.index, set: setting }); 
-            let res = await device.get({dps: device.index}); 
-            return res.on;
+            log.info(`Turn ${setting ? 'on' : 'off'} ${name} at ${swit.index}.`); 
+            await swit.device.set({dps: swit.index, set: setting }); 
+            let res = await swit.device.get({dps: swit.index}); 
+            log.debug(`${name} is now ${res}.`);
+            return res;
         }
         catch (e){
             log.error('Error: ' + e);
         }
     }
 
-    on(name) { return this._handle(name, true); }
-    off(name) { return this._handle(name, false); }
-    toggle(name) { return this._handle(name); }
+    on(name) { return this._set(name, true); }
+    off(name) { return this._set(name, false); }
+    toggle(name) { return this._set(name); }
 }

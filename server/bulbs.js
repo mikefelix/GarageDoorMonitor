@@ -216,8 +216,9 @@ module.exports = class Bulbs {
                 await act.call(handler, bulbName);
                 log.trace(`Made call. Checking result.`);
                 currentState = await handler.getBulbState(bulbName);
+                log.trace(`Result is ${JSON.stringify(currentState)}.`);
                 if (currentState.on !== expectedState)
-                    log.debug(`Retrying because new state is ${currentState.on} instead of ${expectedState}.`);
+                    log.debug(`Retrying because new state is ${currentState.on} instead of ${expectedState}. ${JSON.stringify(currentState)}`);
             }
             while (tried < 10 && expectedState != currentState.on);
 

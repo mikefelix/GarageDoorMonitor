@@ -52,7 +52,7 @@ module.exports = class Devices {
     }
 
     getDeviceState(name){
-        return timeout(7000, null)(this[name].getState(), `get ${name} state`);
+        return timeout(7000, {})(this[name].getState(), `get ${name} state`);
     }
 
     getState(){
@@ -60,8 +60,6 @@ module.exports = class Devices {
             .map(name => this.getDeviceState(name));
         return Q.all(promises).then(states => {
             let [thermState, garageState, bulbState, weatherState, alarmState] = states;
-            if (!thermState) thermState = {};
-
             let state = {
                 away: thermState && thermState.away,
                 garagedoor: garageState,
