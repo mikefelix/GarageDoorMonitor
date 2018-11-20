@@ -22,8 +22,8 @@ let http = require("http"),
     Times = require('./sun_times.js');
 
 const config = JSON.parse(fs.readFileSync('./config.json'));
-for (let key of ["port", "email", "tesselUrl", "authKey", "hueIp", "hueKey", "pushoverKey", "etekBaseUrl", "etekUser", "etekPass", "thermostatId", "structureId", "nestToken", "weatherUrl"]){
-    if (!config[key]){
+for (let key of ["port", "email", "tesselUrl", "authKey", "hueIp", "hueKey", "pushoverKey", "etekBaseUrl", "etekUser", "etekPass", "thermostatId", "structureId", "nestToken", "weatherUrl", "useExtraFan"]){
+    if (!config.hasOwnProperty(key)){
         log('Key required in config: ' + key);
         process.exit(1);
     }
@@ -40,7 +40,7 @@ const devices = new Devices(
     ),
     new Alarm(config.alarmAddress),
     new Garage(config.tesselUrl),
-    new Thermostat(config.thermostatId, config.structureId, config.nestToken),
+    new Thermostat(config.thermostatId, config.structureId, config.nestToken, config.useExtraFan),
     new Fermenter(config.fermenterUrl),
     new Weather(config.weatherUrl)
 );

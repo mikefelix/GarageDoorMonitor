@@ -525,7 +525,7 @@ module.exports = class Scheduler {
 
         let val = dev[key.trim()]; 
         if (val === undefined){
-            log.error(`Property ${key} not found on ${obj}. ${JSON.stringify(dev)}`);
+            log.debug(`Property ${key} not found on ${obj}. ${JSON.stringify(dev)}`);
             return val;
         }
 

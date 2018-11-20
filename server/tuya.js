@@ -88,7 +88,7 @@ module.exports = class Tuya {
                 setting = !(await swit.device.get({dps: swit.index}));
             }
 
-            log.info(`Turn ${setting ? 'on' : 'off'} ${name} at ${swit.index}.`); 
+            log.debug(`Turn ${setting ? 'on' : 'off'} ${name} at index ${swit.index}.`); 
             await swit.device.set({dps: swit.index, set: setting }); 
             let res = await swit.device.get({dps: swit.index}); 
             log.debug(`${name} is now ${res}.`);
