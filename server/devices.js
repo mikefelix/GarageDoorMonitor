@@ -40,7 +40,6 @@ module.exports = class Devices {
             return this.bulbs.on(name, reason);
     }
 
-
     off(name, reason){
         log.debug(`turnOff ${name} because ${reason}`);
         if (name == 'housefan')
@@ -52,7 +51,13 @@ module.exports = class Devices {
     }
 
     getDeviceState(name){
-        return timeout(7000, {})(this[name].getState(), `get ${name} state`);
+        let get;
+        if (this.hasOwnProperty(name))
+            get = this[name].getState.bind(this[name]);
+        else
+            get = this.bulbs.getState.bind(this.bulbs, name);
+
+        return timeout(7000, {})(get(), `get ${name} state`);
     }
 
     getState(){
@@ -84,18 +89,20 @@ module.exports = class Devices {
             };
 
             let temp = state.hvac.temp, target = state.hvac.target;
-            if (state.hvac.mode == 'cool'){
-                state.hvac.nearTarget = (!weatherState || weatherState.temp >= 76) &&
-                    temp >= target && 
-                    temp - target <= 2;
-            }
-            else if (state.hvac.mode == 'heat'){
-                state.hvac.nearTarget = (!weatherState || weatherState.temp <= 50) &&
-                    temp <= target && 
-                    target - temp <= 2;
-            }
-            else {
-                state.hvac.nearTarget = false;
+            if (this.therm.useExtraFan){
+                if (state.hvac.mode == 'cool'){
+                    state.hvac.nearTarget = (!weatherState || weatherState.temp >= 76) &&
+                        temp >= target && 
+                        temp - target <= 2;
+                }
+                else if (state.hvac.mode == 'heat'){
+                    state.hvac.nearTarget = (!weatherState || weatherState.temp <= 50) &&
+                        temp <= target && 
+                        target - temp <= 2;
+                }
+                else {
+                    state.hvac.nearTarget = false;
+                }
             }
 
             state.history = state.bulbs.history;

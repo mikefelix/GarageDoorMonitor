@@ -4,7 +4,7 @@ let axios = require("axios"),
     log = require("./log.js")("Therm");
         
 module.exports = class Thermostat {
-    constructor(thermId, structureId, nestToken){
+    constructor(thermId, structureId, nestToken, useExtraFan){
         //log(`Therm starting with ${thermId}/${structureId}/${nestToken}`);
         this.thermId = thermId;
         this.structureId = structureId;
@@ -14,6 +14,7 @@ module.exports = class Thermostat {
         this.away = false;
         this.canCall = true;
         this.backoff = 1;
+        this.useExtraFan = useExtraFan;
     }
 
     refreshState(){
@@ -96,7 +97,7 @@ module.exports = class Thermostat {
             state,
             on: state != 'off',
             mode: data.hvac_mode,
-            fanOffTime 
+            fanOffTime
         };
     }
 

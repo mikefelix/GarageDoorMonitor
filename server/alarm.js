@@ -44,8 +44,13 @@ module.exports = class Alarm {
             return this.config.lastTriggeredTime;
         }
         
-        if (this.config.override && this.config.override.time){
-            return this.config.override.time;
+        if (this.config.override){
+            if (this.config.override.time){
+                return this.config.override.time;
+            }
+            else {
+                return false;
+            }
         }
 
         let day = new Date().getDay();

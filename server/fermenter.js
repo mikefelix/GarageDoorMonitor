@@ -21,6 +21,7 @@ module.exports = class Fermenter {
     async getState(){
         try {
             let data = await this._post('lcd');
+            log(`data: ${data}`);
             return {
                 mode: data[0].substring(7).replace('Const.', 'constant'),
                 beerTemp: data[1].substring(7, 11), 
