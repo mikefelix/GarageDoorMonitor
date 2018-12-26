@@ -177,13 +177,13 @@ function resetCloseTimer(){
 };
 
 process.on('uncaughtException', function (err) {
-    let msg = 'Uncaught exception: ' + err.message + "\n";
+    var msg = 'Uncaught exception: ' + err.message + "\n";
     msg += err.stack;
     sendAlert('garage-error', msg);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    let msg = 'Unhandled promise: ' + reason + "\n";
+    var msg = 'Unhandled promise: ' + reason + "\n";
     sendAlert('garage-error', msg);
 });
 
