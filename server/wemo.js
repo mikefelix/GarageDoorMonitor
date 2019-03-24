@@ -1,177 +1,143 @@
-const WemoClient = require('wemo-client'),
-      log = require('./log.js')('Wemo'),
-      Q = require('q'),
-      timeout = require('./timeout.js'),
-      wemo = new WemoClient();
+let log = require('./log.js'),
+    Q = require('q'),
+    util = require('util'),
+    timeout = require('./timeout.js');
 
 module.exports = class Wemo {
-    constructor(bulbs){
-        this.clients = {};
-        this.bulbs = bulbs;
-        wemo.discover(info => {
-            log.debug('on startup, discovered ' + info.friendlyName);
-            let client = wemo.client(info);
-            this.clients[info.friendlyName] = client;
-        });
+    constructor(config, name){
+        this.name = name;
+        this.log = log('Wemo ' + this.name);
+        this.log.info(`Initializing ${name}.`);
+        this.reset();
     }
 
-    getState(){
-        let promiseTimer = timeout(5000, null);
+    async reset(){
+        let underlying = require('wemo-client');
+        this.underlying = new underlying();
+        await this.getClient(true);
+    }
 
-        let promises = [];
-        for (let i = 0; i < this.bulbs.length; i++){
-            let bulb = this.bulbs[i];
-            try {
-                log.debug(`Get state for ${bulb}.`);
-                promises.push(promiseTimer(this.getBulbState(bulb), 'get bulb ' + bulb));
-            }
-            catch (e){
-                log.error(`Error getting wemo state for bulb ${bulb}`);
-            }
+    async getState(){
+        try {
+            let state = await this.getClientState();
+            this.log.debug(`got state for ${this.name}: ${state}`);
+            return {on: state === '1' || state === 1 || state === true};
         }
-
-        return Q.all(promises).then(states => {
-            let totalState = {};
-            for (let i = 0; i < this.bulbs.length; i++){
-                log.debug(`State for ${this.bulbs[i]} is ${states[i]}.`);
-                totalState[this.bulbs[i]] = states[i];
-            }
-
-            return totalState;
-        });
+        catch (e){
+            this.log.error(`Error getting state for ${this.name}: ${e}`);
+            return {offline: true};
+        }
     }
 
-    async getBulbState(bulb){
-        bulb = this._lowercase(bulb);
-        let client = await this._getClient(bulb);
-        let state = await this._getClientState(client);
-        return {on: state === '1' || state === 1 || state === true};
+    on(){
+        return this.changeState(this.name, true);
     }
 
-    async on(name){
-        name = this._lowercase(name);
-        return await this._changeState(name, true);
+    off(){ 
+        return this.changeState(this.name, false);
     }
 
-    async off(name){ 
-        name = this._lowercase(name);
-        return await this._changeState(name, false);
-    }
-
-    async toggle(name){ 
-        name = this._lowercase(name);
-        return await this._changeState(name);
+    toggle(){ 
+        return this.changeState(this.name);
     }
     
-    async _changeState(name, newState, retrying){
-        log.debug(`Change ${name} to ${newState}${retrying ? ' (retrying)' : ''}.`);
+    async changeState(newState, retrying){
+        this.log.debug(`Change ${this.name} to ${newState}${retrying ? ' (retrying)' : ''}.`);
         try {
-            let client = await this._getClient(name);
-            log.debug('Client found for ' + name + ': '); 
-            return await this._setClientState(client, newState);
+            let client = await this.getClient();
+            this.log.debug('Client found for ' + this.name + ': '); 
+            return await this.setClientState(newState);
         }
         catch (err) {
             if (retrying){
-                throw err;
+                this.log.error(`Failed on retry to change state for ${this.name}: ${err}`);
+                return false
             }
             else {
-                log.info('Retrying changeState:', name);
-                return await this._changeState(name, newState, true);
+                this.log.info('Retrying changeState:', this.name);
+                return await this.changeState(newState, true);
             }
         }
     }
 
-    _getClient(name, forceDiscover){
-        log.trace(`wemo: get client for ${name}`);
+    getClient(forceDiscover){
+        this.log.trace(`wemo: get client for ${this.name}`);
         return new Promise((resolve, reject) => {
-            name = name.substring(0, 1).toUpperCase() + name.substring(1);
-            //forceDiscover = true; // TODO: needed?
-            //if (forceDiscover)
-                //delete this.clients[name];
+            let name = this.name.substring(0, 1).toUpperCase() + this.name.substring(1);
 
-            let client = this.clients[name];
-            if (client) {
-                resolve(client);
+            if (!forceDiscover && this.client) {
+                this.log.debug(`Already had client for ${name}.`);
+                resolve(this.client);
             }
             else {
                 try {
-                    wemo.discover(deviceInfo => {
+                    this.underlying.discover((err, deviceInfo) => {
                         try {
-                            if (deviceInfo){
-                                log.trace(`Wemo device ${deviceInfo.friendlyName} is at ${deviceInfo.host}:${deviceInfo.port}`);
-
-                                if (deviceInfo.friendlyName == name){
-                                    this.clients[name] = wemo.client(deviceInfo);
-                                    resolve(this.clients[name]);
+                            if (err){
+                                this.log.error('Error: ' + err);
+                            }
+                            else if (deviceInfo){
+                                if (deviceInfo.friendlyName.toLowerCase() == name.toLowerCase()){
+                                    this.log.info(`Wemo device ${deviceInfo.friendlyName} is at ${deviceInfo.host}:${deviceInfo.port}`);
+                                    this.client = this.underlying.client(deviceInfo);
+                                    resolve(this.client);
                                 }
                             }
-                            else 
-                                log.warn('No device info?');
+                            else {
+                                this.log.warn('No device info?');
+                            }
                         }
                         catch (e){
-                            log.error("Cab't discover devices: " + e);
+                            this.log.error("Can't discover devices: " + e);
                             reject(e);
                         }
                     });
                 }
                 catch (e) {
-                    log.error(`Failed to discover Wemo devices.`);
-                    log.error(e);
+                    this.log.error(`Failed to discover Wemo devices.`);
+                    this.log.error(e);
                 }
             }
         });
     }
 
-    _getClientState(client){
-        return new Promise((resolve, reject) => {
-            try {
-                 client.getBinaryState((err, state) => {
-                     if (err)
-                        reject(err);
-                     else 
-                        resolve(state);
-                 });
-            }
-            catch (e){
-                reject(e);
-            }
-        });
+    async getClientState(){
+        try {
+            let client = await this.getClient();
+            if (!client) throw `Can't get client for ${this.name}`;
+            let get = util.promisify(client.getBinaryState.bind(client));
+            return await get();
+        }
+        catch (e){
+            this.log.error(`Failed to get state for ${this.name}. ${e}`);
+        }
     }
 
-    _setClientState(client, newState){
-        return new Promise((resolve, reject) => {
-            try {
-                client.getBinaryState((err, state) => {
-                    state = state === 1 || state === '1' || state === true;
-                    if (err) {
-                        log.error("Error getting wemo state: " + err);
-                        reject(err);
-                    }
-                    else if (newState === undefined){
-                        log.debug("Toggling state from " + state + ".");
-                        client.setBinaryState(state ? 0 : 1);
-                        resolve(true);
-                    }
-                    else if (state != !!newState){
-                        log.debug("Setting to state " + newState + ".");
-                        client.setBinaryState(newState ? 1 : 0);
-                        resolve(true);
-                    }
-                    else {
-                        log.debug("Was already in state " + state + ".");
-                        //resolve(false);
-                        resolve(true);
-                    }
-                });
+    async setClientState(newState){
+        try {
+            let client = await this.getClient();
+            if (!client) throw `Can't get client for ${this.name}`;
+            let set = util.promisify(client.setBinaryState.bind(client));
+            let get = util.promisify(client.getBinaryState.bind(client));
+            let state = await get();
+            state = state === 1 || state === '1' || state === true;
+            if (newState === undefined){
+                this.log.debug("Toggling state from " + state + ".");
+                await set(state ? 0 : 1);
             }
-            catch (e) {
-                log.error("Can't communicate with Wemo: " + e);
-                reject(e);
+            else if (state != !!newState){
+                this.log.debug("Setting to state " + newState + ".");
+                await set(newState ? 1 : 0);
             }
-        });
-    }
+            else {
+                this.log.debug("Was already in state " + state + ".");
+            }
 
-    _lowercase(name){
-        return name.substring(0, 1).toUpperCase() + name.substring(1);
+            return true;
+        }
+        catch (e) {
+            this.log.error("Can't communicate with Wemo: " + e);
+            return false;
+        }
     }
 }

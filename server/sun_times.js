@@ -35,6 +35,14 @@ function toHoursAndMinutes(text){
     return format(parse(text), 'HH:mm');
 }
 
+function getMinutesFromNow(mins){
+    return format(moment().add(mins, 'minutes').toDate(), 'HH:mm');
+}
+
+function currentMinute(){
+    return format(new Date(), 'HH:mm');
+}
+
 function parse(date){
     if (!date) return undefined;
 
@@ -123,4 +131,56 @@ function isBetween(start, end, time){
 function inRange(range){
 }
 
-module.exports = { get, parse, isBetween, toHoursAndMinutes };
+function currentTimeIs(time){
+    if (typeof time != 'string') {
+        log.error('currentTimeIs needs a HH:mm time. Not ' + typeof time);
+        log.error(time);
+        return false;
+    }
+
+    let now = moment();
+    let nowMinute = now.minute();
+    let nowHour = now.hour();
+
+    if (!time) {
+        log.error('Cannot match time ' + time);
+        return false;
+    }
+
+    if (time.match && time.match(/^[0-9]+:[0-9]+$/)){
+        let [a, h, m] = time.match(/([0-9]+):([0-9]+)/);
+        return nowMinute == m && nowHour == h;
+    }
+    else {
+        let then = moment(time);
+        return nowMinute == then.minute() && nowHour == then.hour();
+    }
+}
+
+function currentTimeAtOrAfter(time){
+    if (typeof time != 'string' || !time.match(/^[0-9]+:[0-9]+$/)) {
+        log.error('currentTimeIs needs a HH:mm time. Not ' + typeof time);
+        log.error(time);
+        return false;
+    }
+
+    let [a, hour, minute] = time.match(/([0-9]+):([0-9]+)/);
+    let [b, nowHour, nowMinute] = currentMinute().match(/([0-9]+):([0-9]+)/);
+
+    hour = +hour; nowHour = +nowHour; minute = +minute; nowMinute = +nowMinute;
+    if (hour < 3) hour = hour + 24;
+    if (nowHour < 3) nowHour = nowHour + 24;
+
+    return (nowHour > hour) || (nowHour == hour && nowMinute >= minute);
+}
+
+module.exports = { 
+    get, 
+    parse, 
+    isBetween, 
+    toHoursAndMinutes,
+    getMinutesFromNow,
+    currentMinute,
+    currentTimeIs,
+    currentTimeAtOrAfter
+};

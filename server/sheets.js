@@ -71,19 +71,22 @@ function getNewToken(oAuth2Client, callback) {
 function listMajors(auth) {
   const sheets = google.sheets({version: 'v4', auth});
   sheets.spreadsheets.values.get({
-    spreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
-    range: 'Class Data!A2:E',
+    //spreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
+    spreadsheetId: '1kjyMVCI4P6iiPm_rpDDLjUdyXihRFxCcBtk8S0Pkiyo',
+    range: 'This week!B9:B12',
   }, (err, res) => {
     if (err) return console.log('The API returned an error: ' + err);
     const rows = res.data.values;
-    if (rows.length) {
-      console.log('Name, Major:');
-      // Print columns A and E, which correspond to indices 0 and 4.
-      rows.map((row) => {
-        console.log(`${row[0]}, ${row[4]}`);
-      });
-    } else {
-      console.log('No data found.');
-    }
+
+    if (!rows.length) return console.log('No data found.');
+    const today = rows[0][0];
+    const driving = rows[1][0];
+    const morning = rows[2][0];
+    const night = rows[3][0];
+
+    console.log('Today: ' + today);
+    console.log('Driving today: ' + driving);
+    console.log('Morning: ' + morning);
+    console.log('Night: ' + night);
   });
 }

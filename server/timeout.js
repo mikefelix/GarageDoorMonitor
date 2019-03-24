@@ -25,18 +25,25 @@ module.exports = function(ms, defaultVal){
                     log.warn(msg);
                     resolve(defaultVal);
                 }
+                else if (typeof devaultVal == 'function'){
+                    resolve(defaultVal());
+                }
                 else {
                     reject(msg);
                 }
             }, ms);
         });
 
+        if (typeof promise.then != 'function') log.error(ms + '/' +promise + '/' + action)
         return Promise.race([
             promise.then(d => { 
                 let end = new Date();
                 clearTimeout(id);
                 log.debug(`${action || 'Promise'} completed in ${end.getTime() - start.getTime()} millis.`);
                 return d;
+            }).catch(e => {
+                log.error(`Error during timed promise '${action}': ${e}.`);
+                return defaultVal;
             }),
             timeoutPromise
         ]);

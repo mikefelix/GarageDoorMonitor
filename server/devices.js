@@ -1,77 +1,176 @@
-const Garage = require('./garage.js'),
-      Scheduler = require('./scheduler.js'),
-      Bulbs = require('./bulbs.js'),
-      Weather = require('./weather.js'),
-      Thermostat = require('./thermostat.js'),
+const util = require('util'),
+      Hue = require('./hue.js'),
+      Wemo = require('./wemo.js'),
+      Etek = require('./etek.js'),
+      Tuya = require('./tuya.js'),
+      Readonly = require('./readonly.js'),
       Alarm = require('./alarm.js'),
+      Thermostat = require('./thermostat.js'),
+      Garage = require('./garage.js'),
+      Weather = require('./weather.js'),
       Fermenter = require('./fermenter.js'),
       timeout = require('./timeout.js'),
       Q = require('q'),
       log = require('./log.js')('Devices');
 
 module.exports = class Devices {
-    constructor(bulbs, alarm, garagedoor, therm, fermenter, weather){
-        this.bulbs = bulbs;
-        this.bulbs.fireEvent = this.eventFired.bind(this);
-        this.alarm = alarm;
-        this.alarm.fireEvent = this.eventFired.bind(this);
-        this.garagedoor = garagedoor;
-        this.garagedoor.fireEvent = this.eventFired.bind(this);
-        this.therm = therm;
-        this.therm.fireEvent = this.eventFired.bind(this);
-        this.fermenter = fermenter;
-        this.fermenter.fireEvent = this.eventFired.bind(this);
-        this.weather = weather;
-        this.weather.fireEvent = this.eventFired.bind(this);
+    //constructor(bulbs, alarm, garagedoor, therm, fermenter, weather, readonly){
+    constructor(config){
+        this.devices = {};
+        this.history = {};
+
+        let init = (underlying, conf, device) => {
+            let name = typeof device == 'string' ? device : device.name;
+            this.devices[name] = new underlying(conf, device);
+            this.devices[name].type = 'device';
+            this.history[name] = {};
+        }
+
+        if (config.etek){
+            for (let device of (config.etek.devices || [])){ init(Etek, config.etek, device); }
+        }
+
+        if (config.hue){
+            for (let device of (config.hue.devices || [])){ init(Hue, config.hue, device); }
+        }
+
+        if (config.wemo){
+            for (let device of (config.wemo.devices || [])){ init(Wemo, config.wemo, device); }
+        }
+
+        if (config.tuya){
+            for (let device of (config.tuya.devices || [])){ init(Tuya, config.tuya, device); }
+        }
+
+        if (config.alarm){
+            this.devices.alarm = new Alarm(config.alarm);
+            this.devices.alarm.fireEvent = this.eventFired.bind(this);
+        }
+
+        if (config.garage){
+            this.devices.garagedoor = new Garage(config.garage);
+            this.devices.garagedoor.fireEvent = this.eventFired.bind(this);
+        }
+
+        if (config.nest){
+            this.devices.therm = new Thermostat(config.nest.thermostatId, config.nest.structureId, config.nest.token, config.useExtraFan);
+            this.devices.therm.fireEvent = this.eventFired.bind(this);
+            this.devices.hvac = {
+                getState: async () => {
+                    let thermState = await this.devices.therm.getState();
+                    return {
+                        humidity: thermState.humidity,
+                        away: thermState.away,
+                        temp: thermState.temp,
+                        target: thermState.target,
+                        state: thermState.state,
+                        mode: thermState.mode,
+                        on: thermState.state == 'heating' || thermState.state == 'cooling'
+                    }
+                }
+            };
+            this.devices.housefan = {
+                getState: async () => {
+                    let thermState = await this.devices.therm.getState();
+                    return {
+                        on: thermState.on,
+                        offTime: thermState.fanOffTime
+                    }
+                }
+            };
+        }
+        else log.error(`Not setting up thermostat.`);
+
+        if (config.fermenter){
+            this.devices.fermenter = new Fermenter(config.fermenter);
+            this.devices.fermenter.fireEvent = this.eventFired.bind(this);
+        }
+
+        if (config.weather){
+            this.devices.weather = new Weather(config.weather);
+            this.devices.weather.fireEvent = this.eventFired.bind(this);
+        }
+
+        if (config.devices){
+            for (let dev in config.devices){
+                this.devices[dev] = new Readonly(null, {name: dev, ip: config.devices[dev]});
+            }
+        }
+    }
+
+    reset(){
+        //this.bulbs.reset();
     }
 
     eventFired(event){
         if (event == 'garageOpenedAtNight')
-            this.bulbs.on('outside', 180, event);
+            this.devices.outside.on(180, event);
     }
 
     on(name, reason){
         log.debug(`turnOn ${name} because ${reason}`);
         if (name == 'housefan')
-            return this.therm.set('fan', 30);
-        else if (name == 'alarm')
-            return this.alarm.on();
-        else
-            return this.bulbs.on(name, reason);
+            return this.devices.therm.set('fan', 30);
+        else {
+            if (!this.devices[name])
+                throw 'Unknown device ' + name;
+            else
+                return this.devices.on(name, reason);
+        }
     }
 
     off(name, reason){
         log.debug(`turnOff ${name} because ${reason}`);
         if (name == 'housefan')
             return false;
-        else if (name == 'alarm')
-            return this.alarm.off();
-        else
-            return this.bulbs.off(name, reason);
+        else {
+            if (!this.devices[name])
+                throw 'Unknown device ' + name;
+            else
+                return this.devices.off(name, reason);
+        }
     }
 
-    getDeviceState(name){
-        let get;
-        if (this.hasOwnProperty(name))
-            get = this[name].getState.bind(this[name]);
-        else
-            get = this.bulbs.getState.bind(this.bulbs, name);
+    getState(name){
+        if (!name){
+            let promises = [];
+            for (let dev in this.devices){
+                let device = this.devices[dev];
+                if (!device) log.error(`No device for ${device}!`);
+                promises.push(device.getState());
+            }
 
-        return timeout(7000, {})(get(), `get ${name} state`);
+            return Promise.all(promises).then(states => {
+                let result = {};
+                for (let dev in this.devices){
+                    result[dev] = states.shift();
+                }
+
+                return result;
+            });
+        }
+        else {
+            let device = this.devices[name];
+            if (!device) log.error(`No device for ${name}!`);
+            return timeout(8000, {offline: true})(device.getState(), `get ${name} state`);
+        }
     }
 
-    getState(){
-        let promises = ['therm', 'garagedoor', 'bulbs', 'weather', 'alarm']
+    /*getState(){
+        let promises = ['therm', 'garagedoor', 'bulbs', 'weather', 'alarm', 'readonly']
             .map(name => this.getDeviceState(name));
+
         return Q.all(promises).then(states => {
-            let [thermState, garageState, bulbState, weatherState, alarmState] = states;
+            let [thermState, garageState, bulbState, weatherState, alarmState, readonlyState] = states;
             let state = {
                 away: thermState && thermState.away,
                 garagedoor: garageState,
                 alarm: alarmState,
-                bulbs: bulbState,
+                bulbs: bulbState, //deprecated
+                devices: bulbState,
                 hvac: {
                     humidity: thermState.humidity,
+                    away: thermState.away,
                     temp: thermState.temp,
                     target: thermState.target,
                     state: thermState.state,
@@ -87,6 +186,11 @@ module.exports = class Devices {
                 },
                 times: Times.get(true)
             };
+
+            for (let dev in readonlyState){
+                log.debug(`Adding readonly ${dev}.`);
+                state.devices[dev] = readonlyState[dev];
+            }
 
             let temp = state.hvac.temp, target = state.hvac.target;
             if (this.therm.useExtraFan){
@@ -108,6 +212,8 @@ module.exports = class Devices {
             state.history = state.bulbs.history;
             delete state.bulbs.history;
             return state;
+        }).catch(e => {
+            log.error(`Caught an exception in devices.getState: ${e}`);
         });
-    }
+    }*/
 }

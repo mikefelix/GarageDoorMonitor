@@ -14,17 +14,26 @@
             "end": "07:30"
         },
         "sleepytime": {
-            "start": "22:30",
+            "start": "22:00",
             "end": "alarm.ringTimeToday | 10:00"
         }
     }, 
+    "aliases": {
+        "home": "!hvac.away | phone | phone2 | phone3",
+        "computer": "bigcomputer | littlecomputer"
+    },
+    "groups": {
+        "bed": ["bedlamp", "bedheat"],
+        "livingroom": ["floorlamp", "wine", "couchlamp"]
+    },
     "schedules":{
         "coffee": {
             "on": "alarm.time-10",
-            "off": "/30 & coffee.power < 500"
+            "off": "/60 & coffee.power < 500",
+            "override": "switchon,on"
         },
         "piano": {
-            "off": "1~60"
+            "off": "1~120"
         },
         "driveway": {
             "off": "/1"
@@ -33,11 +42,16 @@
             "off": "/5"
         },
         "fan": {
-            "off": "/60"
+            "off": "/90",
+            "override": false
         },
-        "lamp": {
-            "on": "sunset-45",
+        "floorlamp": {
+            "on": "sunset-15",
             "off": "23:00"
+        },
+        "couchlamp": {
+            "on": "sunset-45",
+            "off": "23:05"
         },
         "aquarium": {
             "on": "sunrise",
@@ -55,30 +69,43 @@
             "off": "!housefan.on"
         },
         "office": {
-            "on": "!day & 192.168.0.112",
-            "off": "day | !192.168.0.112"
+            "on": "!day & computer",
+            "off": "day | !computer"
         },
         "alarm": {
             "on": "alarm.time",
-            "off": "coffee.power > 500 | /60"
+            "off": "coffee.power > 500 | 11:00"
         },
-        "bed": {
-            "on": "sleepytime & owner.home & weather.temp < 60",
-            "off": "!sleepytime | bed.power < 5"
+        "bedheat": {
+            "on": "sleepytime & home & weather.temp < 60",
+            "off": "!sleepytime | bedheat.power < 5"
         },
         "grow": {
             "on": "09:00",
             "off": "21:00"
         },
+        "scent": {
+            "on": "!sleepytime & !hvac.away & /10",
+            "off": "/10",
+            "override": false,
+            "disabled": true
+        },
         "tessel": {
             "on": "!tessel.on",
-            "off": "garagedoor.offline"
-        },
-        "charger": {
-            "on": "21:00"
+            "off": "garagedoor.offline & tessel.upTime > 2",
+            "disabled": true
         },
         "stereo": {
-            "off": "!owner.home"
+            "on": "22:00 & home",
+            "off": "!home | alarm.ringTimeToday"
+        },
+        "charger": {
+            "on": "alarm.ringTimeToday",
+            "off": "!home | stereo"
+        },
+        "bedlamp": {
+            "on": "21:15 & home",
+            "off": "23:59 | !home"
         }
     }
 }

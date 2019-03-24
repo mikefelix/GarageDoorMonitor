@@ -90,11 +90,6 @@ module.exports = class Bulbs {
         return await this.getBulb(bulbName);
     }
 
-    async getHueState() { return await this.hue.getState(); }
-    async getWemoState() { return await this.wemo.getState(); }
-    async getEtekState() { return await this.etek.getState(); }
-    async getTuyaState() { return await this.tuya.getState(); }
-
     getState(){
         let promiseTimer = timeout(6000, null);
         let getHue = promiseTimer(this.hue.getState(), 'get hue state');

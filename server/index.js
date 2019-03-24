@@ -1,8 +1,12 @@
 let http = require("http"),
     url = require("url"),
+    util = require('util'),
     Q = require('q'),
-    timeout = require('./timeout.js'),
+    redis = require('redis').createClient(),
+    rkeys = util.promisify(redis.keys).bind(redis),
+    rdel = redis.del.bind(redis),
     fs = require("fs"),
+    history = require('./history.js'),
     log = require("./log.js")("Main"),
     format = require("./format.js"),
     path = require("path"),
@@ -12,7 +16,6 @@ let http = require("http"),
     mail = require('./mail.js').send,
     Garage = require('./garage.js'),
     Scheduler = require('./scheduler.js'),
-    Bulbs = require('./bulbs.js'),
     Weather = require('./weather.js'),
     Thermostat = require('./thermostat.js'),
     Alarm = require('./alarm.js'),
@@ -21,44 +24,35 @@ let http = require("http"),
     Tuya = require('./tuya.js'),
     Times = require('./sun_times.js');
 
+const logGets = false;
+
 const config = JSON.parse(fs.readFileSync('./config.json'));
-for (let key of ["port", "email", "tesselUrl", "authKey", "hueIp", "hueKey", "pushoverKey", "etekBaseUrl", "etekUser", "etekPass", "thermostatId", "structureId", "nestToken", "weatherUrl", "useExtraFan"]){
-    if (!config.hasOwnProperty(key)){
-        log('Key required in config: ' + key);
-        process.exit(1);
-    }
-}
+const devices = new Devices(config);
+const scheduler = new Scheduler('./schedules.json', devices);
+
+//const history = new History();
 
 let logLevel = process.env.LOG_LEVEL || 3;
 let recentLambda = false;
 
-const devices = new Devices(
-    new Bulbs(
-        `http://${config.hueIp}/api/${config.hueKey}/lights`, 
-        [config.etekUser, config.etekPass, config.etekBaseUrl],
-        config.tuyaDevices
-    ),
-    new Alarm(config.alarmAddress),
-    new Garage(config.tesselUrl),
-    new Thermostat(config.thermostatId, config.structureId, config.nestToken, config.useExtraFan),
-    new Fermenter(config.fermenterUrl),
-    new Weather(config.weatherUrl)
-);
-
-const scheduler = new Scheduler('./schedules.json', devices);
-
 process.on('uncaughtException', function (err) {
-    log.error(' uncaughtException: ' + err.message);
+    log.error('uncaughtException: ' + err.message);
     log.error(err.stack);
-    process.exit(1);
+    log.error('Resetting devices.');
+    reset();
+    //process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled promise rejection. Reason: ' + reason);
-    process.exit(1);
+    log.error('Unhandled promise rejection. Reason: ' + reason);
+    throw reason;
 });
 
 process.on('warning', e => console.warn(e.stack));
+
+function reset(){
+    devices.reset();
+}
 
 function verifyAuth(req){
     log.debug(`verify ${req.url}`);
@@ -74,7 +68,19 @@ function verifyAuth(req){
     return false;
 }
 
+async function dumpCache(){
+    let ret = {};
+    let keys = await rkeys('*');
+    for (let key of keys){
+        ret[key] = await rget(key);
+    }
+    return ret;
+}
+
 const routes = {
+    'GET /devices/([0-9a-z]+)': async (request, device) => {
+        return devices.getState(device);
+    },
     'GET /test': async () => {
         log.info('testing');
     },
@@ -119,6 +125,24 @@ const routes = {
         
         return 200;
     },
+    'POST /cominghome': async (request) => {
+        log.info('Coming home command received.');
+        if (Times.get().isNight) 
+            devices.on('outside', 180, 'coming home');
+
+        devices.therm.set('away', false);
+        devices.garagedoor.open(5, request.url);
+        return 200;
+    },
+    'POST /leavinghome': async (request) => {
+        log.info('Leaving home command received.');
+        if (Times.get().isNight) 
+            devices.on('outside', 180, 'leaving home');
+
+        devices.therm.set('away', true);
+        devices.garagedoor.open(5, request.url);
+        return 200;
+    },
     'POST /alive': async () => {
         log.info('Tessel reports that it is alive.');
         return 200;
@@ -145,6 +169,12 @@ const routes = {
     'POST /open([0-9]*)': async (request, time) => { // call from user
         return await devices.garagedoor.open(time, request.url);
     },
+    'PUT /beer/heater': async (request) => {
+        return await devices.fermenter.heater(true);
+    },
+    'DELETE /beer/heater': async (request) => {
+        return await devices.fermenter.heater(false);
+    },
     'POST /beer/([^/]+)/([0-9.]+)': async (request, setting, temp) => { 
         let drift = false;
         if (setting.match(/drift/)){
@@ -154,63 +184,110 @@ const routes = {
 
         return await devices.fermenter.set(setting, temp, drift);
     },
-    'GET /state/history': async () => {
+    'GET /state/cache': async () => {
+        return await dumpCache();
+    },
+    'DELETE /state/cache': async () => {
+        let keys = await rkeys('*');
+        for (let key of keys){
+           rdel(key);
+        }
+
         return true;
     },
+    'GET /state/history': async () => {
+        return await history.getEvents(10);
+    },
     'GET /state/beer': async () => {
+        if (!devices.fermenter) log.error(`No fermenter found.`);
         return await devices.fermenter.getState();
     },
     'GET /state/alarm': async () => {
+        if (!devices.alarm) log.error(`No alarm found.`);
         return await devices.alarm.getState();
     },
     'GET /state/garagedoor': async () => {
+        if (!devices.garagedoor) log.error(`No garagedoor found.`);
         return await devices.garagedoor.getState();
     },
     'GET /state/weather': async () => {
+        if (!devices.weather) log.error(`No weather found.`);
         return await devices.weather.getState();
     },
-    'GET /state/lights': async () => {
-        return await devices.bulbs.getState();
-    },
-    'GET /state/lights/hue': async () => {
-        return await devices.bulbs.getHueState();
-    },
-    'GET /state/lights/wemo': async () => {
-        return await devices.bulbs.getWemoState();
-    },
-    'GET /state/lights/etek': async () => {
-        return await devices.bulbs.getEtekState();
-    },
+    //'GET /state/lights': async () => {
+        //return await devices.bulbs.getState();
+    //},
+    //'GET /state/lights/hue': async () => {
+        //return await devices.bulbs.getHueState();
+    //},
+    //'GET /state/lights/wemo': async () => {
+        //return await devices.bulbs.getWemoState();
+    //},
+    //'GET /state/lights/etek': async () => {
+        //return await devices.bulbs.getEtekState();
+    //},
     'GET /state/times': async () => {
         let times = Times.get(true);
         let schedules = await scheduler.getSchedules();
         return { times, schedules };
     },
     'GET /state/thermostat': async () => {
+        if (!devices.therm) log.error(`No therm found.`);
         return await devices.therm.getState();
     },
     'POST /state/thermostat': async () => {
         return await devices.therm.moveTemp1();
     },
-    'GET /state': async () => {
+    /*'GET /state': async () => {
+        let schedules = await scheduler.getSchedules();
+        let bulbs = await devices.getState();
+
+        if (!devices.garagedoor) log.error(`No garagedoor found.`);
+        if (!devices.therm) log.error(`No therm found.`);
+
         let state = {
             garagedoor: await devices.garagedoor.getState(),
-            bulbs: await devices.bulbs.getState(),
-            schedules: await scheduler.getSchedules(),
+            bulbs,
+            ranges: schedules.ranges,
             thermostat: await devices.therm.getState(),
-            times: Times.get(true)
+            times: Times.get(true),
+            cache: await dumpCache()
         };
 
-        state.history = state.bulbs.history;
+        for (dev in bulbs){
+            let bulb = bulbs[dev];
+            let sched = schedules[dev];
+            let hist = state.bulbs.history[dev];
+            if (bulb && sched){
+                if (sched.upTime !== undefined){
+                    bulb.upTime = sched.upTime;
+                    delete sched.upTime;
+                }
+
+                if (sched.timer){
+                    bulb.timer = sched.timer;
+                    delete sched.timer;
+                }
+
+                bulb.schedule = sched;
+            }
+
+            if (bulb && hist){
+                bulb.history = hist;
+            }
+        }
+
         delete state.bulbs.history;
 
         return state;
-    },
+    },*/
     'DELETE /therm/away': async () => {
         return await devices.therm.set('away', false);
     },
     'PUT /therm/away': async () => {
+        log.trace('Thermostat poo 1');
         return await devices.therm.set('away', true);
+        log.trace('Thermostat poo 2');
     },
     'POST /therm/temp([0-9]+)': async (request, temp) => {
         return await devices.therm.set('target_temperature_f', temp);
@@ -235,7 +312,7 @@ const routes = {
         }
         else {
             log(`IoT button pressed in daytime; opening garage. ${date}`);
-            await devices.garagedoor.open(30, request.url);
+            await devices.garagedoor.open(10, request.url);
         }
 
         return 202;
@@ -257,22 +334,20 @@ const routes = {
         action = action.replace('force', '');
 
         if (meth == 'GET')
-            return await devices.bulbs.getBulb(device);
+            return await devices.getState(device);
 
         if (meth == 'POST'){
             if (override){
-                if (scheduler.setOverride(device))
-                    devices.bulbs.setOverride(device);
+                scheduler.setOverride(device)
             }
             
             if (action == 'revert'){
                 scheduler.removeOverride(device);
-                devices.bulbs.removeOverride(device);
                 await scheduler.check(device);
                 return true;
             }
             else {
-                return await devices.bulbs[action].bind(devices.bulbs)(device, 'triggered by user');
+                return await devices[action].bind(devices)(device, 'triggered by user');
             }
         }
     }
@@ -280,7 +355,7 @@ const routes = {
 
 async function handleRequest(request, response){
     let req = request.method + ' ' + request.url.replace(/\?.*$/, '');
-    if (!req.match('^GET /state'))
+    if (logGets || !req.match('^GET /state'))
         log(`Received call at ${format(new Date())}: ${req}`);
 
     try {
@@ -307,7 +382,7 @@ async function handleRequest(request, response){
         return 404;
     }
     catch (e){
-        log(`Caught error during request ${req}: ${e}`);
+        log.error(`Caught error during request ${req}: ${e}`);
         return 500;
     }
 }

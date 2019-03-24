@@ -4,8 +4,16 @@ var axios = require('axios'),
     log = require('./log.js')('Alarm');
 
 module.exports = class Alarm {
-    constructor(address){
-        this.piAddress = address;
+    constructor(addresses){
+        if (addresses[0]){
+            this.piAddress = addresses[0];
+            if (addresses[1])
+                this.otherAddress = addresses[1];
+        }
+        else {
+            this.piAddress = addresses;
+        }
+
         this._readFile();
     }
 
@@ -27,11 +35,15 @@ module.exports = class Alarm {
         return this.hasTriggeredToday() ? this.config.time[(now.getDay() + 1) % 7] : this.config.time[now.getDay()];
     }
 
+    hasRungToday(){
+        return this.config.lastTriggeredAction == 'rung' && this.hasTriggeredToday();
+    }
+
     hasTriggeredToday(){
         let lastTriggeredDay = this.config.lastTriggeredDay || "never";
         let today = format(new Date(), "YYYYMMDD");
         log.debug(`Last triggered is ${lastTriggeredDay}. Today is ${today}.`);
-        return lastTriggeredDay == format(new Date(), "YYYYMMDD");
+        return lastTriggeredDay == today;
     }
 
     enabledForToday(){
@@ -39,10 +51,11 @@ module.exports = class Alarm {
         return this.config.enabled[day];
     }
 
-    timeForToday(){
-        if (this.hasTriggeredToday()){
+    ringTimeToday(){
+        if (this.hasRungToday())
             return this.config.lastTriggeredTime;
-        }
+        else if (this.hasTriggeredToday())
+            return false;
         
         if (this.config.override){
             if (this.config.override.time){
@@ -89,10 +102,12 @@ module.exports = class Alarm {
                 time: this.nextTime()
             },
             time: this.timeToTrigger(),
-            ringTimeToday: this.timeForToday(),
+            hasTriggeredToday: this.hasTriggeredToday(),
+            ringTimeToday: this.ringTimeToday(),
             lastTriggered: {
                 day: this.config.lastTriggeredDay,
-                time: this.config.lastTriggeredTime
+                time: this.config.lastTriggeredTime,
+                action: this.config.lastTriggeredAction
             },
             times: this.config.time,
             override: this.config.override,
@@ -131,25 +146,55 @@ module.exports = class Alarm {
         this._writeFile();
     }
 
+    async send(method, path, retrying){
+        try {
+            if (retrying){
+                let other = this.otherAddress;
+                this.otherAddress = this.piAddress;
+                this.piAddress = other;
+            }
+
+            let opts = { url: this.piAddress + '/' + path, method };
+            return await axios(opts);
+        }
+        catch (e){
+            if (retrying){
+                log.error('Error during retry sending to alarm: ' + e);
+                return {offline: true};
+            }
+            else {
+                log.error('Error sending to alarm: ' + e);
+                log.info(`Retrying send to ${this.otherAddress}.`);
+                return await this.send(method, path, true);
+            }
+        }
+    }
+
     async getPiState(){
         try {
-            return (await axios({ method: 'GET', url: this.piAddress })).data;
+            return (await this.send('GET', 'state')).data;
         }
         catch (e){
             log.error("Could not communicate with Pi: " + e);
-            return {};
+            return {offline: true};
         }
     }
 
     async on(){
+        let ring = !this.hasTriggeredToday();
         this.config.lastTriggeredDay = format(new Date(), "YYYYMMDD");
         this.config.lastTriggeredTime = format(new Date(), "HH:mm");
 
-        let ring = true;
-        if (this.config.override){
+        // Todo: enable via override when disabled.
+        if (!this.enabledForToday()){
+            ring = false;
+            this.config.lastTriggeredAction = 'disabled';
+        }
+        else if (this.config.override){
             if (this.config.override.disable){
                 log.info(`Not ringing because overridden for ${this.config.override.days} days.`);
                 ring = false;
+                this.config.lastTriggeredAction = 'overridden';
             }
 
             this.config.override.days = (this.config.override.days || 0) - 1;
@@ -161,11 +206,13 @@ module.exports = class Alarm {
             
         if (ring){
             try {
+                let res = await this.send('POST', 'go');
                 log.info(`Ringing alarm.`);
-                let res = await axios({ method: 'POST', url: this.piAddress + '/go' });
+                this.config.lastTriggeredAction = 'rung';
             }
             catch (e) {
                 log.error("Could not communicate with Pi: " + e);
+                this.config.lastTriggeredAction = 'errored';
                 return false;
             }
         }
@@ -177,7 +224,7 @@ module.exports = class Alarm {
     async off(){
         try {
             log.info(`Silencing alarm.`);
-            let res = await axios({ method: 'POST', url: this.piAddress + '/stop' });
+            let res = await this.send('POST', 'stop');
             return true;
         }
         catch (e) {
