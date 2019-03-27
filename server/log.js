@@ -3,7 +3,7 @@ const moment = require('moment-timezone'),
       kafka = require('kafka-node'),
       client = new kafka.KafkaClient({kafkaHost: 'localhost:9092'}),
       producer = /*{on:()=>{}},//*/new kafka.Producer(client),
-      pad = 32;
+      pad = 35;
 
 let kafkaReady = false;
 
@@ -40,11 +40,11 @@ module.exports = function(segment, filterLevel){
 
         filterLevel = filterLevel || process.env.LOG_LEVEL || 3;
         if (filterLevel >= level)
-            console.log(`${prefix}:${padding}${msg}`);
+            console.log(`${prefix} @${level}:${padding}${msg}`);
 
         if (kafkaReady && level <= 3) {
             let body = { segment, level, time, msg };
-            producer.send([{ topic: 'events', messages: JSON.stringify(body) }], (err, data) => {
+            producer.send([{ topic: 'events', partition: 0, messages: [JSON.stringify(body)] }], (err, data) => {
                 if (err){
                     console.log(`Error: ${err}`);
                 }

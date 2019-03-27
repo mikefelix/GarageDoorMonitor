@@ -4,9 +4,9 @@ let {get, put} = require('request'),
     Q = require('q');
 
 module.exports = class Etek {
-    constructor(login, password, baseUrl, bulbs, meterBulbs){
-        log.debug(`Etek starting with ${login}/${password}/${baseUrl}`);
-        this.client = new EtekClient(login, password, baseUrl);
+    constructor(config, bulbs, meterBulbs){
+        log.debug(`Etek starting with ${config.login}/${config.password}/${config.baseUrl}`);
+        this.client = new EtekClient(config.login, config.password, config.baseUrl);
         this.bulbs = bulbs;
         this.meterBulbs = meterBulbs;
     }

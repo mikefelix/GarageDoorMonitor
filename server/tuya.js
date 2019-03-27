@@ -46,6 +46,14 @@ module.exports = class Tuya {
         try {
             let deviceStates = await this.getDeviceStates();
             let state = {};
+            if (!deviceStates){
+                log.error(`No device states`);
+            }
+
+            if (deviceStates.length != this.switches.length){
+                log.error(`There are ${deviceStates.length} deviceStates but ${this.switches.length} switches.`);
+            }
+
             for (let sw in this.switches){
                 let swit = this.switches[sw];
                 let device = swit.device;
@@ -95,7 +103,7 @@ module.exports = class Tuya {
             return res;
         }
         catch (e){
-            log.error('Error: ' + e);
+            log.error(`Error for ${name}: ${e}`);
         }
     }
 

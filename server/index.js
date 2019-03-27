@@ -1,8 +1,12 @@
 let http = require("http"),
     url = require("url"),
+    util = require('util'),
     Q = require('q'),
-    timeout = require('./timeout.js'),
+    redis = require('redis').createClient(),
+    rkeys = util.promisify(redis.keys).bind(redis),
+    rdel = redis.del.bind(redis),
     fs = require("fs"),
+    history = require('./history.js'),
     log = require("./log.js")("Main"),
     format = require("./format.js"),
     path = require("path"),
@@ -21,44 +25,55 @@ let http = require("http"),
     Tuya = require('./tuya.js'),
     Times = require('./sun_times.js');
 
+require('events').EventEmitter.prototype._maxListeners = 100;
+
+const logGets = false;
+
 const config = JSON.parse(fs.readFileSync('./config.json'));
-for (let key of ["port", "email", "tesselUrl", "authKey", "hueIp", "hueKey", "pushoverKey", "etekBaseUrl", "etekUser", "etekPass", "thermostatId", "structureId", "nestToken", "weatherUrl", "useExtraFan"]){
-    if (!config.hasOwnProperty(key)){
-        log('Key required in config: ' + key);
-        process.exit(1);
-    }
-}
-
-let logLevel = process.env.LOG_LEVEL || 3;
-let recentLambda = false;
-
 const devices = new Devices(
     new Bulbs(
-        `http://${config.hueIp}/api/${config.hueKey}/lights`, 
-        [config.etekUser, config.etekPass, config.etekBaseUrl],
-        config.tuyaDevices
+        config.hue || null, 
+        config.etek || null,
+        config.wemo || null,
+        config.tuya || []
     ),
-    new Alarm(config.alarmAddress),
-    new Garage(config.tesselUrl),
-    new Thermostat(config.thermostatId, config.structureId, config.nestToken, config.useExtraFan),
-    new Fermenter(config.fermenterUrl),
-    new Weather(config.weatherUrl)
+    config.alarmAddress ? new Alarm(config.alarmAddress) : null,
+    config.tesselUrls ? new Garage(config.tesselUrls) : null,
+    config.nest ? new Thermostat(config.nest.thermostatId, config.nest.structureId, config.nest.token, config.useExtraFan) : null,
+    config.fermenterUrl ? new Fermenter(config.fermenterUrl) : null,
+    config.weatherUrl ? new Weather(config.weatherUrl) : null,
+    config.devices
 );
 
 const scheduler = new Scheduler('./schedules.json', devices);
 
+//const history = new History();
+
+let logLevel = process.env.LOG_LEVEL || 3;
+let recentLambda = false;
+
+process.on('warning', e => console.warn(e.stack));
+
 process.on('uncaughtException', function (err) {
     log.error(' uncaughtException: ' + err.message);
     log.error(err.stack);
-    process.exit(1);
+    log.error('Resetting devices.');
+    reset();
+    //process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled promise rejection. Reason: ' + reason);
-    process.exit(1);
+    log.error('Unhandled promise rejection. Reason: ' + reason);
+    log.error('Resetting devices.');
+    reset();
+    //process.exit(1);
 });
 
 process.on('warning', e => console.warn(e.stack));
+
+function reset(){
+    devices.reset();
+}
 
 function verifyAuth(req){
     log.debug(`verify ${req.url}`);
@@ -72,6 +87,15 @@ function verifyAuth(req){
         return true;
 
     return false;
+}
+
+async function dumpCache(){
+    let ret = {};
+    let keys = await rkeys('*');
+    for (let key of keys){
+        ret[key] = await rget(key);
+    }
+    return ret;
 }
 
 const routes = {
@@ -119,6 +143,24 @@ const routes = {
         
         return 200;
     },
+    'POST /cominghome': async (request) => {
+        log.info('Coming home command received.');
+        if (Times.get().isNight) 
+            devices.bulbs.on('outside', 180, 'coming home');
+
+        devices.therm.set('away', false);
+        devices.garagedoor.open(5, request.url);
+        return 200;
+    },
+    'POST /leavinghome': async (request) => {
+        log.info('Leaving home command received.');
+        if (Times.get().isNight) 
+            devices.bulbs.on('outside', 180, 'leaving home');
+
+        devices.therm.set('away', true);
+        devices.garagedoor.open(5, request.url);
+        return 200;
+    },
     'POST /alive': async () => {
         log.info('Tessel reports that it is alive.');
         return 200;
@@ -145,6 +187,12 @@ const routes = {
     'POST /open([0-9]*)': async (request, time) => { // call from user
         return await devices.garagedoor.open(time, request.url);
     },
+    'PUT /beer/heater': async (request) => {
+        return await devices.fermenter.heater(true);
+    },
+    'DELETE /beer/heater': async (request) => {
+        return await devices.fermenter.heater(false);
+    },
     'POST /beer/([^/]+)/([0-9.]+)': async (request, setting, temp) => { 
         let drift = false;
         if (setting.match(/drift/)){
@@ -154,8 +202,19 @@ const routes = {
 
         return await devices.fermenter.set(setting, temp, drift);
     },
-    'GET /state/history': async () => {
+    'GET /state/cache': async () => {
+        return await dumpCache();
+    },
+    'DELETE /state/cache': async () => {
+        let keys = await rkeys('*');
+        for (let key of keys){
+           rdel(key);
+        }
+
         return true;
+    },
+    'GET /state/history': async () => {
+        return await history.getEvents(10);
     },
     'GET /state/beer': async () => {
         return await devices.fermenter.getState();
@@ -193,15 +252,47 @@ const routes = {
         return await devices.therm.moveTemp1();
     },
     'GET /state': async () => {
+        let schedules = await scheduler.getSchedules();
+        let bulbs = await devices.bulbs.getState();
+        let readonly = await devices.getAllReadonlyState();
+
+        for (let dev in readonly){
+            log.debug(`readonly ${dev}: ${JSON.stringify(readonly[dev])}`);
+            bulbs[dev] = readonly[dev];
+        }
+
         let state = {
             garagedoor: await devices.garagedoor.getState(),
-            bulbs: await devices.bulbs.getState(),
-            schedules: await scheduler.getSchedules(),
+            bulbs,
+            ranges: schedules.ranges,
             thermostat: await devices.therm.getState(),
-            times: Times.get(true)
+            times: Times.get(true),
+            cache: await dumpCache()
         };
 
-        state.history = state.bulbs.history;
+        for (dev in bulbs){
+            let bulb = bulbs[dev];
+            let sched = schedules[dev];
+            let hist = state.bulbs.history[dev];
+            if (bulb && sched){
+                if (sched.upTime !== undefined){
+                    bulb.upTime = sched.upTime;
+                    delete sched.upTime;
+                }
+
+                if (sched.timer){
+                    bulb.timer = sched.timer;
+                    delete sched.timer;
+                }
+
+                bulb.schedule = sched;
+            }
+
+            if (bulb && hist){
+                bulb.history = hist;
+            }
+        }
+
         delete state.bulbs.history;
 
         return state;
@@ -210,7 +301,9 @@ const routes = {
         return await devices.therm.set('away', false);
     },
     'PUT /therm/away': async () => {
+        log.trace('Thermostat poo 1');
         return await devices.therm.set('away', true);
+        log.trace('Thermostat poo 2');
     },
     'POST /therm/temp([0-9]+)': async (request, temp) => {
         return await devices.therm.set('target_temperature_f', temp);
@@ -235,7 +328,7 @@ const routes = {
         }
         else {
             log(`IoT button pressed in daytime; opening garage. ${date}`);
-            await devices.garagedoor.open(30, request.url);
+            await devices.garagedoor.open(10, request.url);
         }
 
         return 202;
@@ -261,13 +354,11 @@ const routes = {
 
         if (meth == 'POST'){
             if (override){
-                if (scheduler.setOverride(device))
-                    devices.bulbs.setOverride(device);
+                scheduler.setOverride(device)
             }
             
             if (action == 'revert'){
                 scheduler.removeOverride(device);
-                devices.bulbs.removeOverride(device);
                 await scheduler.check(device);
                 return true;
             }
@@ -275,12 +366,17 @@ const routes = {
                 return await devices.bulbs[action].bind(devices.bulbs)(device, 'triggered by user');
             }
         }
+    },
+    'GET /devicegroups': async () => {
+        return {
+            groups: config.rooms
+        }
     }
 };
 
 async function handleRequest(request, response){
     let req = request.method + ' ' + request.url.replace(/\?.*$/, '');
-    if (!req.match('^GET /state'))
+    if (logGets || !req.match('^GET /state'))
         log(`Received call at ${format(new Date())}: ${req}`);
 
     try {

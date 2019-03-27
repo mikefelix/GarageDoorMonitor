@@ -1,15 +1,101 @@
 {
-    "port": "",
+    "port": "8888",
     "email": "",
-    "tessel_url": "",
-    "auth_key": "", 
-    "hue_ip": "", 
-    "hue_key": "", 
-    "pushover_key": "", 
-    "etek_base_url": "",
-    "etek_user": "", 
-    "etek_pass": "", 
-    "thermostat_id": "", 
-    "structure_id": "", 
-    "nest_token": ""
+    "tesselUrls": [""],
+    "authKey": "", 
+    "pushoverKey": "", 
+    "hue": {
+        "ip": "", 
+        "key": "",
+        "bulbs": {
+            "garage": [1],
+            "breezeway": [2],
+            "driveway": [3,4],
+            "outside": ["garage","breezeway"]
+        }
+    }, 
+    "wemo": {
+        "bulbs": ["fan","vent","stereo","couchlamp","heater"]
+    },
+    "etek": {
+        "baseUrl": "",
+        "login": "", 
+        "password": "",
+        "bulbs": ["coffee", "tessel", "wine", "piano", "aquarium", "bedheat", "grow", "office"],
+        "meterBulbs": ["coffee", "bedheat", "piano"]
+    },
+    "nest": {
+        "thermostatId": "", 
+        "structureId": "", 
+        "token": ""
+    },
+    "weatherUrl": "",
+    "alarmAddress": ["", ""],
+    "fermenterUrl": "",
+    "tuya": [{
+        "ip": "",
+        "id": "",
+        "key": "",
+        "switches": ["bedlamp", "charger"]
+    },{
+    "ip": "",
+    "id": "",
+    "key": "",
+    "switches": ["floorlamp", "scent"]
+    }],
+    "devices": {
+        "phone": "192.168.0.129",
+        "phone2": "192.168.0.104",
+        "phone3": "192.168.0.124",
+        "bigcomputer": "192.168.0.112",
+        "littlecomputer": "192.168.0.105"
+    },
+    "rooms": [
+        {
+            "name": "bedroom",
+            "devices": [
+                "fan",
+                "bedheat",
+                "bedlamp",
+                "charger",
+                "stereo"
+            ]
+        },
+        {
+            "name": "garage",
+            "devices": [
+                "garagedoor",
+                "outside"
+            ]
+        },
+        {
+            "name": "living room",
+            "devices": [
+                "floorlamp",
+                "couchlamp",
+                "aquarium",
+                "wine"
+            ]
+        },
+        {
+            "name": "basement",
+            "devices": [
+                "grow",
+                "heater"
+            ]
+        },
+        {
+            "name": "other",
+            "collapsed": true,
+            "devices": [
+                "vent",
+                "tessel",
+                "driveway",
+                "coffee",
+                "scent"
+            ]
+        }
+    ],
+    "useExtraFan": false,
+    "logLevel": 2
 }

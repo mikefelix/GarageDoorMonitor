@@ -12,22 +12,23 @@ let doAfterSeconds = (after, doThis) => {
 }
 
 module.exports = class Bulbs {
-    constructor(hueAddress, etekCreds, tuyaConfig){
-        this.wemoBulbs = ['fan', 'vent', 'lamp'];
-        this.etekBulbs = ['coffee', 'tessel', 'wine', 'piano', 'aquarium', 'bed', 'grow', 'office'];
-        this.hueBulbs = {
-            garage: [1],
-            breezeway: [2],
-            driveway: [3,4],
-            outside: ['garage','breezeway']
-        };
-        this.tuyaBulbs = ['charger', 'stereo'];
-        this.tuya = new Tuya(tuyaConfig || []);
-        this.hue = new Hue(hueAddress, this.hueBulbs);
+    constructor(hue, etek, wemo, tuya){
+        this.wemoBulbs = wemo.bulbs || [];
+        this.etekBulbs = etek.bulbs || [];
+        this.hueBulbs = hue.bulbs || [];
+        this.tuyaBulbs = [];
+        for (let t of tuya){
+            for (let s of t.switches){
+                this.tuyaBulbs.push(s);
+            }
+        }
+
+        this.tuya = new Tuya(tuya || [], this.tuyaBulbs);
+        this.hue = new Hue(hue.ip, hue.key, this.hueBulbs);
         this.wemo = new Wemo(this.wemoBulbs);
-        this.etek = new Etek(etekCreds[0], etekCreds[1], etekCreds[2], this.etekBulbs, ['coffee', 'bed', 'piano']);
+        this.etek = new Etek(etek, this.etekBulbs, etek.meterBulbs);
+
         this.history = {};
-        this.overrides = {};
 
         for (let bulb of this.etekBulbs){
             this.history[bulb] = {};
@@ -46,12 +47,11 @@ module.exports = class Bulbs {
         }
     }
 
-    removeOverride(name){
-        delete this.overrides[name];
-    }
-
-    setOverride(name){
-        this.overrides[name] = true;
+    reset(){
+        log.error(`Resetting bulbs because of too many timeouts.`);
+        this.timeouts = 0;
+        this.wemo = new Wemo(this.wemoBulbs);
+        //this.wemo.reset();
     }
 
     async getBulb(name){
@@ -63,14 +63,17 @@ module.exports = class Bulbs {
             let ret = {
                 on: state.on,
                 power: state.power,
-                history: this.history[name],
-                overridden: !!this.overrides[name]
+                history: this.history[name]
             };
 
             return ret;
         }
         catch (e){
             log.error(`Couldn't get state for bulb ${name}: ${e}`);
+            this.timeouts = (this.timeouts || 0) + 1;
+            if (this.timeouts > 9){
+                this.reset();
+            }
             return false;
         }
     }
@@ -96,7 +99,16 @@ module.exports = class Bulbs {
     async getTuyaState() { return await this.tuya.getState(); }
 
     getState(){
-        let promiseTimer = timeout(6000, null);
+        let promiseTimer = timeout(6000, () => {
+            this.timeouts = (this.timeouts || 0) + 1;
+            log.error(`Incrementing timeouts to ${this.timeouts}.`);
+            if (this.timeouts > 9){
+                this.reset();
+            }
+
+            return null;
+        });
+
         let getHue = promiseTimer(this.hue.getState(), 'get hue state');
         let getWemo = promiseTimer(this.wemo.getState(), 'get wemo state'); 
         let getEtek = promiseTimer(this.etek.getState(), 'get etek state');
@@ -105,16 +117,15 @@ module.exports = class Bulbs {
         return Q.all([getHue, getWemo, getEtek, getTuya]).then(states => {
             let [hueState, wemoState, etekState, tuyaState] = states;
             let state = {};
-            if (wemoState) state = Object.assign(state, wemoState);
+            if (wemoState) {
+                this.timeouts = 0;
+                state = Object.assign(state, wemoState);
+            }
+
             if (hueState) state = Object.assign(state, hueState);
             if (etekState) state = Object.assign(state, etekState);
             if (tuyaState) state = Object.assign(state, tuyaState);
             state.history = this.history;
-            for (let override in this.overrides){
-                if (state[override] && this.overrides[override]){
-                    state[override].overridden = true;
-                }
-            }
 
             return state;
         });

@@ -12,10 +12,11 @@
     "moment-timezone": "^0.5.11",
     "q": "^1.5.1",
     "querystring": "^0.2.0",
+    "redis": "^2.8.0",
     "request": "~2.72.0",
     "suncalc": "^1.8.0",
     "tuyapi": "github:codetheweb/tuyapi",
-    "wemo-client": "^0.11.2"
+    "wemo-client": "^0.15.0"
   },
   "devDependencies": {},
   "scripts": {

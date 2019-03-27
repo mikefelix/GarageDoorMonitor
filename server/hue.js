@@ -4,9 +4,9 @@ let {get, put} = require('request'),
     Q = require('q');
 
 module.exports = class Hue {
-    constructor(address, bulbs){
-        log(4, `Hue starting at ${address}`);
-        this.hueAddress = address;
+    constructor(ip, key, bulbs){
+        this.hueAddress = `http://${ip}/api/${key}/lights`;
+        log.debug(`Hue starting at ${this.hueAddress}`);
         this.bulbs = bulbs;
     }
 
@@ -19,12 +19,12 @@ module.exports = class Hue {
             for (let j = 0; j < bulbs.length; j++){
                 try {
                     let state = await this.getBulbState(bulbs[j]);
-                    log(5, `state ${JSON.stringify(state)}`);
+                    log.trace(`state ${JSON.stringify(state)}`);
                     if (!totalState[name]) totalState[name] = {on: false};
                     totalState[name].on = (totalState[name].on || state.on);
                 }
                 catch (e){
-                    log(1, `Error getting hue state for bulb ${name}: ${e}`);
+                    log.error(`Error getting hue state for bulb ${name}: ${e}`);
                 }
             }
         }
@@ -41,21 +41,21 @@ module.exports = class Hue {
                 let num = bulbs[i];
                 if (!/[0-9+]/.test(num)) {
                     let arr = this._getBulbNumbers(num);
-                    if (!arr.length) log(1, 'ERROR: ' + (typeof arr) + ' is not an array');
+                    if (!arr.length) log.error('ERROR: ' + (typeof arr) + ' is not an array');
                     else num = arr[0];
                 }
 
                 if (!/[0-9+]/.test(num)) {
-                    log(1, 'ERROR: Cannot get bulb number for ' + num);
+                    log.error('ERROR: Cannot get bulb number for ' + num);
                 }
 
                 let body = await this._req(get, num);
-                log(5, 'Body for ' + bulb + ': ' + body);
+                log.trace('Body for ' + bulb + ': ' + body);
                 if (!body) throw 'Response is empty';
                 state |= /"on": ?true/.test(body);
             }
             catch (e){
-                log(1, `Error getting bulb state for ${bulb}: ${e}`);
+                log.error(`Error getting bulb state for ${bulb}: ${e}`);
                 return false;
             }
         } 
@@ -64,12 +64,12 @@ module.exports = class Hue {
     }
 
     async toggle(bulb, timeout) {
-        log(`Toggle ${bulb} at ${format(new Date())}`);
+        log.debug(`Toggle ${bulb} at ${format(new Date())}`);
         let bulbs = this._getBulbNumbers(bulb);
         let promises = [];
         if (typeof bulbs[0] == 'string'){
             for (let i = 0; i < bulbs.length; i++){
-                log(`As part of "toggle" for ${bulb}, toggling ${bulbs[i]}`);
+                log.debug(`As part of "toggle" for ${bulb}, toggling ${bulbs[i]}`);
                 promises.push(this.toggle(bulbs[i], timeout));
             }
         }
@@ -78,7 +78,7 @@ module.exports = class Hue {
                 let bulb = bulbs[i];
                 let body = await this._req(get, bulb);
                 let on = !!body && /"on": ?true/.test(body);
-                log(`Bulb ${bulb} was ${on}, so toggling.`);
+                log.debug(`Bulb ${bulb} was ${on}, so toggling.`);
                 promises.push(this._req(put, `${bulb}/state`, JSON.stringify({on: !on}))
                     .then(res => /"success"/.test(res))
                 );
@@ -95,13 +95,13 @@ module.exports = class Hue {
     }
 
     async on(bulb, timeout) {
-        log(`Turn on ${bulb} at ${format(new Date())}`);
+        log.debug(`Turn on ${bulb} at ${format(new Date())}`);
         let bulbs = this._getBulbNumbers(bulb);
         let promises = [];
 
         if (typeof bulbs[0] == 'string'){
             for (let i = 0; i < bulbs.length; i++){
-                log(`As part of "on" for ${bulb}, turning on ${bulbs[i]}`);
+                log.debug(`As part of "on" for ${bulb}, turning on ${bulbs[i]}`);
                 promises.push(this.on(bulbs[i], timeout));
             }
         }
@@ -123,13 +123,13 @@ module.exports = class Hue {
     }
 
     async off(bulb) {
-        log(`Turn off ${bulb} at ${format(new Date())}`);
+        log.debug(`Turn off ${bulb} at ${format(new Date())}`);
         let bulbs = this._getBulbNumbers(bulb);
         let promises = [];
 
         if (typeof bulbs[0] == 'string'){
             for (let i = 0; i < bulbs.length; i++){
-                log(`As part of "off" for ${bulb}, turning off ${bulbs[i]}`);
+                log.debug(`As part of "off" for ${bulb}, turning off ${bulbs[i]}`);
                 promises.push(this.off(bulbs[i]));
             }
 
@@ -165,14 +165,13 @@ module.exports = class Hue {
             if (body)
                 o.body = body;
 
-            //sole.log((method == get ? 'GET' : 'PUT'), endpoint, (body ? 'with body: ' + body : ""));
             method(o, (err, res, body) => {
                 if (err){
                     if (retrying){
                         reject(err);
                     }
                     else {
-                        log(2, 'Retrying', url);
+                        log.warn('Retrying', url);
                         this._req(method, url, body, true)
                           .then(res2 => resolve(res2))
                           .catch(err2 => reject(err2));

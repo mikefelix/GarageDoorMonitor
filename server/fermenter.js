@@ -14,14 +14,15 @@ module.exports = class Fermenter {
     }
 
     async _post(type, data){
-        let res = await axios.post(this.url, qs.stringify({messageType: type, message: data || ''}));
+        let payload = `messageType=${type}&message=${data || ''}`;
+        log.info(payload);
+        let res = await axios.post(this.url, payload);
         return res.data;
     }
 
     async getState(){
         try {
             let data = await this._post('lcd');
-            log(`data: ${data}`);
             return {
                 mode: data[0].substring(7).replace('Const.', 'constant'),
                 beerTemp: data[1].substring(7, 11), 
@@ -44,6 +45,27 @@ module.exports = class Fermenter {
         }
         catch (e){
             log.error('Could not turn off fermenter.' + e);
+            return false;
+        }
+    }
+
+    async heater(enable){
+        try {
+            if (!enable) { // disable heater
+                log.info('Disabling heater.');
+                let res = await this._post('applyDevice', '%7B%22i%22%3A%222%22%2C%22c%22%3A%220%22%2C%22b%22%3A%220%22%2C%22f%22%3A%222%22%2C%22h%22%3A%221%22%2C%22p%22%3A%222%22%2C%22x%22%3A%220%22%7D');
+                log.info('Disable heater result: ' + JSON.stringify(res.data));
+            }
+            else { // enable heater
+                log.info('Enabling heater.');
+                let res = await this._post('applyDevice', '%7B%22i%22%3A%222%22%2C%22c%22%3A%221%22%2C%22b%22%3A%220%22%2C%22f%22%3A%222%22%2C%22h%22%3A%221%22%2C%22p%22%3A%222%22%2C%22x%22%3A%220%22%7D');
+                log.info('Enable heater result: ' + JSON.stringify(res));
+            }
+            
+            return true;
+        }
+        catch (e){
+            log.error(`Could not set heater to ${enable}: ${e}`);
             return false;
         }
     }

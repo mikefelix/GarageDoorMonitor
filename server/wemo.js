@@ -1,24 +1,40 @@
-const WemoClient = require('wemo-client'),
-      log = require('./log.js')('Wemo'),
-      Q = require('q'),
-      timeout = require('./timeout.js'),
-      wemo = new WemoClient();
+let log = require('./log.js')('Wemo'),
+    Q = require('q'),
+    timeout = require('./timeout.js');
 
 module.exports = class Wemo {
     constructor(bulbs){
-        this.clients = {};
+        log.info(`Initializing Wemo.`);
+        this.reset();
         this.bulbs = bulbs;
-        wemo.discover(info => {
-            log.debug('on startup, discovered ' + info.friendlyName);
-            let client = wemo.client(info);
-            this.clients[info.friendlyName] = client;
+        this.clients = {};
+        this.timeouts = {};
+
+        /*
+        wemo.discover((err, info) => {
+            if (err){
+                log.error('Error on discovery: ' + err);
+            }
+            else {
+                log.debug('on startup, discovered ' + info.friendlyName);
+                let client = wemo.client(info);
+                this.clients[info.friendlyName] = client;
+            }
         });
+        */
+    }
+
+    reset(){
+        let client = require('wemo-client');
+        this.wemo = new client();
+        this.clients = {};
+        this.timeouts = {};
     }
 
     getState(){
-        let promiseTimer = timeout(5000, null);
-
+        let promiseTimer = timeout(15000, null);
         let promises = [];
+
         for (let i = 0; i < this.bulbs.length; i++){
             let bulb = this.bulbs[i];
             try {
@@ -33,8 +49,23 @@ module.exports = class Wemo {
         return Q.all(promises).then(states => {
             let totalState = {};
             for (let i = 0; i < this.bulbs.length; i++){
-                log.debug(`State for ${this.bulbs[i]} is ${states[i]}.`);
-                totalState[this.bulbs[i]] = states[i];
+                let bulb = this.bulbs[i];
+                log.debug(`State for ${bulb} is ${JSON.stringify(states[i])}.`);
+
+                if (states[i]){
+                    totalState[bulb] = states[i];
+                    delete this.timeouts[bulb];
+                }
+                else {
+                    this.timeouts[bulb] == (this.timeouts[bulb] || 0) + 1;
+                    if (this.timeouts[bulb] >= 5){
+                        log.error(`Too many timeouts for ${bulb}. Resetting devices.`);
+                        this.reset();
+                    }
+
+                    totalState[this.bulbs[i]] = {offline: true};
+                }
+
             }
 
             return totalState;
@@ -42,10 +73,18 @@ module.exports = class Wemo {
     }
 
     async getBulbState(bulb){
-        bulb = this._lowercase(bulb);
-        let client = await this._getClient(bulb);
-        let state = await this._getClientState(client);
-        return {on: state === '1' || state === 1 || state === true};
+        try {
+            bulb = this._lowercase(bulb);
+            let client = await this._getClient(bulb);
+            log.debug(`got a client for ${bulb}`);
+            let state = await this._getClientState(client);
+            log.debug(`got state for ${bulb}: ${state}`);
+            return {on: state === '1' || state === 1 || state === true};
+        }
+        catch (e){
+            log.error(`Error getting state for ${bulb}: ${e}`);
+            return {offline: true};
+        }
     }
 
     async on(name){
@@ -72,7 +111,8 @@ module.exports = class Wemo {
         }
         catch (err) {
             if (retrying){
-                throw err;
+                log.error(`Failed on retry to change state for ${name}: ${err}`);
+                return false
             }
             else {
                 log.info('Retrying changeState:', name);
@@ -85,23 +125,24 @@ module.exports = class Wemo {
         log.trace(`wemo: get client for ${name}`);
         return new Promise((resolve, reject) => {
             name = name.substring(0, 1).toUpperCase() + name.substring(1);
-            //forceDiscover = true; // TODO: needed?
-            //if (forceDiscover)
-                //delete this.clients[name];
 
             let client = this.clients[name];
             if (client) {
+                log.debug(`Already had client for ${name}.`);
                 resolve(client);
             }
             else {
                 try {
-                    wemo.discover(deviceInfo => {
+                    this.wemo.discover((err, deviceInfo) => {
                         try {
-                            if (deviceInfo){
-                                log.trace(`Wemo device ${deviceInfo.friendlyName} is at ${deviceInfo.host}:${deviceInfo.port}`);
+                            if (err){
+                                log.error('Error: ' + err);
+                            }
+                            else if (deviceInfo){
+                                log.info(`Wemo device ${deviceInfo.friendlyName} is at ${deviceInfo.host}:${deviceInfo.port}`);
 
                                 if (deviceInfo.friendlyName == name){
-                                    this.clients[name] = wemo.client(deviceInfo);
+                                    this.clients[name] = this.wemo.client(deviceInfo);
                                     resolve(this.clients[name]);
                                 }
                             }
@@ -109,7 +150,7 @@ module.exports = class Wemo {
                                 log.warn('No device info?');
                         }
                         catch (e){
-                            log.error("Cab't discover devices: " + e);
+                            log.error("Can't discover devices: " + e);
                             reject(e);
                         }
                     });
@@ -126,13 +167,17 @@ module.exports = class Wemo {
         return new Promise((resolve, reject) => {
             try {
                  client.getBinaryState((err, state) => {
-                     if (err)
-                        reject(err);
-                     else 
-                        resolve(state);
+                     if (err){
+                         log.error(`Error getting state: ${err}`);
+                         reject(err);
+                     }
+                     else {
+                         resolve(state);
+                     }
                  });
             }
             catch (e){
+                log.error(`Failed to get state for ${client.name}. ${e}`);
                 reject(e);
             }
         });

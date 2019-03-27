@@ -22,14 +22,14 @@ module.exports = class Thermostat {
         if (this.refreshAwayCounter == 0){
             getAway = this._callThermostat('away')
                 .then(res => {
-                    if (!res || !res.data){
-                        log.error('No data found in away response.');
+                    if (!res || !res.away){
+                        log.error(`No away data found in away response: ${JSON.stringify(res)}.`);
                         this.away = false;
                     } 
                     else {
-                        let away = res.data.away != 'home';
+                        let away = res.away != 'home';
                         if (away != this.away) 
-                            log.info(`Set away to ${away} (${res.data.away}).`);
+                            log.info(`Set away to ${away} (${res.away}).`);
 
                         this.away = away;
                     }
@@ -40,7 +40,7 @@ module.exports = class Thermostat {
         this.refreshAwayCounter = (this.refreshAwayCounter + 1) % this.refreshAwayEvery;
 
         let getTherm = this._callThermostat()
-            .then(res => this.state = this._trimThermResponse(res))
+            .then(data => this.state = this._trimThermResponse(data))
             .catch(err => log.error(`Error getting therm state: ${err}`));
 
         return getAway ?
@@ -48,6 +48,14 @@ module.exports = class Thermostat {
             getTherm;
     }
 
+    on(){
+        return this.set('away', false);
+    }
+
+    off(){
+        return this.set('away', true);
+    }
+        
     async getState(){
         if (this.canCall){
             //log('getState() is calling.');
@@ -77,9 +85,7 @@ module.exports = class Thermostat {
         }
     }
 
-    _trimThermResponse(res){
-        if (!res || !res.data) return {};
-        let data = res.data;
+    _trimThermResponse(data){
         if (!data)
             throw 'No data found in response.';
 
@@ -123,7 +129,7 @@ module.exports = class Thermostat {
             }
             else if (prop == 'away'){
                 if (value !== undefined)
-                    data = { away: (value ? 'home' : 'away') };
+                    data = { away: (value ? 'away' : 'home') };
             }
 
             let method = data ? 'PUT' : 'GET';
@@ -135,10 +141,14 @@ module.exports = class Thermostat {
                 }
             });
             
+            if (prop == 'away') {
+                return {away: res.data.away};
+            }
+
             if (prop == 'fan' && value && this.state.state == 'off')
                 this.state.state = 'fan';
                 
-            return res;
+            return res.data;
         }
         catch (err){
             log.error(`Error while calling Nest (${prop ? prop : 'therm'}): ${err}`);
