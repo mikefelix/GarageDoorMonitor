@@ -9,11 +9,11 @@ module.exports = class Thermostat {
         this.thermId = thermId;
         this.structureId = structureId;
         this.nestToken = nestToken;
-        this.refreshAwayEvery = 5;
+        this.refreshAwayEvery = 3;
         this.refreshAwayCounter = 0;
         this.away = false;
         this.canCall = true;
-        this.backoff = 1;
+        this.backoff = 2;
         this.useExtraFan = useExtraFan;
     }
 
@@ -57,13 +57,14 @@ module.exports = class Thermostat {
     }
         
     async getState(){
-        if (this.canCall){
-            //log('getState() is calling.');
-            await this.refreshState();
+        if (this.canCall || !this.state){
             this.canCall = false;
+            //log.info('Calling NEST.');
+            //try { throw new Error('trace') } catch (e) { log.info(e.stack) }
+            await this.refreshState();
             setTimeout(() => this.canCall = true, this.backoff * 57000);
         }
-        //else log('getState()');
+        //else log('Skipping call to NEST.');
 
         return this.state;
     }
@@ -148,6 +149,8 @@ module.exports = class Thermostat {
             if (prop == 'fan' && value && this.state.state == 'off')
                 this.state.state = 'fan';
                 
+            log.debug(`Response for ${url}:`);
+            log.debug(res.data);
             return res.data;
         }
         catch (err){

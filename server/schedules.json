@@ -77,8 +77,9 @@
             "off": "coffee.power > 500 | 11:00"
         },
         "bedheat": {
-            "on": "sleepytime & home & weather.temp < 60",
-            "off": "!sleepytime | bedheat.power < 5"
+            "on": "sleepytime & home",
+            "off": "!sleepytime | bedheat.power < 5",
+            "disabled": true
         },
         "grow": {
             "on": "09:00",
@@ -101,7 +102,7 @@
         },
         "charger": {
             "on": "alarm.ringTimeToday",
-            "off": "!home | stereo"
+            "off": "!home"
         },
         "bedlamp": {
             "on": "21:15 & home",

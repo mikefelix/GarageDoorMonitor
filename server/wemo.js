@@ -30,15 +30,25 @@ module.exports = class Wemo {
     }
 
     on(){
-        return this.changeState(this.name, true);
+        try {
+            return this.changeState(true);
+        }
+        catch (e){
+            return {offline: true};
+        }
     }
 
     off(){ 
-        return this.changeState(this.name, false);
+        try {
+            return this.changeState(false);
+        }
+        catch (e){
+            return {offline: true};
+        }
     }
 
     toggle(){ 
-        return this.changeState(this.name);
+        return this.changeState();
     }
     
     async changeState(newState, retrying){

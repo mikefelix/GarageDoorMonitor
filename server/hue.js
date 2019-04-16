@@ -8,7 +8,7 @@ module.exports = class Hue {
         this.log = log('Hue ' + device.name);
         this.nums = device.bulbs;
         this.name = device.name;
-        this.log.info(`Initializing ${this.name}.`);
+        this.log.info(`Initializing ${this.name} with bulbs ${this.nums}.`);
         this.hueAddress = `http://${config.ip}/api/${config.key}/lights`;
     }
 
@@ -60,7 +60,7 @@ module.exports = class Hue {
     async off() {
         for (let num of this.nums){
             this.log.debug(`Turn off ${num}.`);
-            this._req(put, `${num}/state`, JSON.stringify({on:true}));
+            this._req(put, `${num}/state`, JSON.stringify({on:false}));
         }
 
         return true;

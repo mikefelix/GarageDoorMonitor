@@ -9,10 +9,8 @@
         "ip": "192.168.0.115", 
         "key": "KgVPpqOz3wdHb5ILmgwHdG5SA35WzbTEDKYrsxz0",
         "devices": [
-            {"name": "garage", "bulbs": [1]},
-            {"name": "breezeway", "bulbs": [2]},
             {"name": "driveway", "bulbs": [3,4]},
-            {"name": "outside", "bulbs": ["garage","breezeway"]}
+            {"name": "outside", "bulbs": [1,2,3,4]}
         ]
     }, 
     "wemo": {
@@ -22,7 +20,7 @@
         "baseUrl": "https://server1.vesync.com:4007",
         "login": "michael.felix@gmail.com", 
         "password": "4vpvkTGX41Ay5VK",
-        "devices": ["coffee", "tessel", "wine", "piano", "aquarium", "bedheat", "grow", "office"],
+        "devices": ["coffee", "wine", "piano", "aquarium", "bedheat", "grow", "office"],
         "meterBulbs": ["coffee", "bedheat", "piano"]
     },
     "nest": {
@@ -30,7 +28,7 @@
         "structureId": "S11opO3qo1rP0xJvugTkzfpVEHEqrgQrCU6EBWM3jd02uGGZYfEpUw", 
         "token": "c.E7APpbqdmTJaPRI0ZnojtdIUFOjMOQyqWjV0WBmIuOBTASWrXg7AlFjAmVKxQ2wUasO0hq9AbyhZ3bbPf22QakzvNLMypjuO5QzFEwqrDjqMtiiNgE7oMUIWAJjkQoBYl83TYt7l0FPNUwmP"
     },
-    "weather": "https://mozzarelly.com/weather/current",
+    "weather": "https://api.openweathermap.org/data/2.5/weather?id=5778755&APPID=4baebedec5d766f259f6852bc3353d4e",
     "fermenter": "https://mozzarelly.com/brewpi/socketmessage.php",
     "tuya": {
         "devices": [
@@ -71,29 +69,14 @@
         "bigcomputer": "192.168.0.112",
         "littlecomputer": "192.168.0.105"
     },
-    "rooms": {
-        "Bedroom": ["bedheat","bedlamp","fan","charger","stereo"],
-        "Living room": ["floorlamp","couchlamp","aquarium","wine","scent"],
-        "Office": ["office","bigcomputer","littlecomputer"],
-        "Garage": ["garage","outside","breezeway"],
-        "Other": ["phone","piano","coffee"]
-    },
     "rooms": [
         {
             "name": "bedroom",
             "devices": [
-                "fan",
                 "bedheat",
                 "bedlamp",
                 "charger",
                 "stereo"
-            ]
-        },
-        {
-            "name": "garage",
-            "devices": [
-                "garagedoor",
-                "outside"
             ]
         },
         {
@@ -103,6 +86,13 @@
                 "couchlamp",
                 "aquarium",
                 "wine"
+            ]
+        },
+        {
+            "name": "garage",
+            "devices": [
+                "garagedoor",
+                "outside"
             ]
         },
         {
@@ -116,14 +106,23 @@
             "name": "other",
             "collapsed": true,
             "devices": [
+                "fan",
                 "vent",
-                "tessel",
-                "driveway",
+                "office",
                 "coffee",
+                "piano",
                 "scent"
             ]
         }
     ],
+    "aliases":{
+        "floorlamp": "Floor lamp",
+        "couchlamp": "Table lamp",
+        "bedheat": "Bed",
+        "bedlamp": "Lamp",
+        "garagedoor": "Door",
+        "outside": "Lights"
+    },
     "useExtraFan": false,
     "logLevel": 2
 }

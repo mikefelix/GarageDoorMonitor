@@ -63,7 +63,8 @@ class EtekClient {
         return {
             id: device.id,
             name: device.deviceName,
-            status: device.relay,
+            status: device.status == 'offline' ? 'offline' : device.relay,
+            offline: device.status == 'offline',
             on: device.relay == 'open'
         };
     }
@@ -85,7 +86,6 @@ class EtekClient {
                 }
             });
             
-            response.devices.map(device => this.log.debug(`device ${device.deviceName} is ${device.id}`));
             return response.devices
                 .map(device => this._transformResponse(device));
         }
@@ -112,10 +112,14 @@ class EtekClient {
                 }
             });
             
-            response.devices.map(device => this.log.debug(`device ${name} is ${device.id}`));
-            return response.devices
+            let res = response.devices
                 .filter(device => device.deviceName == name)
                 .map(device => this._transformResponse(device))[0];
+
+            this.log.debug(`response:`);
+            this.log.debug(res);
+
+            return res;
         }
         catch (err){
             this.log.error('getDevice error: ' + err);
@@ -301,9 +305,10 @@ module.exports = class Etek {
         try {
             let device = await this.client.getDevice(this.name);
             let meter = await this.client.getMeter(device.id);
-            this.log.debug(`meter for ${this.name} is ${JSON.stringify(meter)}`);
+            this.log.debug(`meter for ${this.name} is ${JSON.stringify(meter.power)}`);
             return {
                 on: device.on,
+                offline: device.offline,
                 power: meter.power
             };
         }
@@ -339,7 +344,8 @@ module.exports = class Etek {
         try {
             let device = await this.client.getDevice(this.name);
             this.log.debug(`Turning device ${device.name} (${device.id}) on.`);
-            await this.client.turnOn(device.id);
+            let newState = await this.client.turnOn(device.id);
+            this.log.debug(`Turned on. New state is ${newState.on}.`);
             return true;
         } 
         catch (e){
@@ -352,7 +358,8 @@ module.exports = class Etek {
         try {
             let device = await this.client.getDevice(this.name);
             this.log.debug(`Turning device ${device.name} (${device.id}) off.`);
-            await this.client.turnOff(device.id);
+            let newState = await this.client.turnOff(device.id);
+            this.log.debug(`Turned off. New state is ${newState.on}.`);
             return true;
         } 
         catch (e){

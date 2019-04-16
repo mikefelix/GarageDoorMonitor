@@ -55,7 +55,7 @@ function reset(){
 }
 
 function verifyAuth(req){
-    log.debug(`verify ${req.url}`);
+    log.debug(`verify ${req.url}. ${Object.keys(req.headers)}`);
     if (req.method == 'GET' || req.url.match(/^\/(test|warn)/))
         return true;
     if (req.method == 'POST' && /^\/(opened|closed|alive|garage-error)/.test(req.url))
@@ -78,8 +78,27 @@ async function dumpCache(){
 }
 
 const routes = {
-    'GET /devices/([0-9a-z]+)': async (request, device) => {
-        return devices.getState(device);
+    'GET /devicegroups': async () => {
+        return {
+            groups: config.rooms
+        }
+    },
+    'PUT /device/([a-z0-9_]+)': async (request, device) => {
+        scheduler.setOverride(device)
+        await devices.on(device, request.url);
+        return await devices.getState(device);
+    },
+    'DELETE /device/([a-z0-9_]+)': async (request, device) => {
+        await devices.off(device, request.url);
+        return await devices.getState(device);
+    },
+    'GET /device/([0-9a-z]+)': async (request, device) => {
+        let res = await devices.getState(device);
+        log.info(res);
+        return res;
+    },
+    'GET /scheduler/([0-9a-z]+)': async (request, device) => {
+        return await scheduler.getState(device);
     },
     'GET /test': async () => {
         log.info('testing');
@@ -101,7 +120,13 @@ const routes = {
         log.error(`Tessel reports error:`); 
         log.error(Object.keys(request));
     },
-    'POST /alarm/stop': async () => {
+    'GET /alarm': async () => {
+        return devices.alarm.getState();
+    },
+    'PUT /alarm': async () => {
+        return devices.alarm.getState();
+    },
+    'POST /alarm/stop_mv73bEuCCGxD': async () => {
         devices.alarm.off();
         return 200;
     },
@@ -151,7 +176,7 @@ const routes = {
         if (!t) t = 'indefinitely';
 
         if (Times.get().isNight)
-            devices.bulbs.on('outside', 180, 'garage opened at night');
+            devices.on('outside', 180, 'garage opened at night');
 
         log.info(`Tessel reports opened ${t} state.`);
         //saveSnap(10);
@@ -202,30 +227,10 @@ const routes = {
         if (!devices.fermenter) log.error(`No fermenter found.`);
         return await devices.fermenter.getState();
     },
-    'GET /state/alarm': async () => {
-        if (!devices.alarm) log.error(`No alarm found.`);
-        return await devices.alarm.getState();
-    },
-    'GET /state/garagedoor': async () => {
-        if (!devices.garagedoor) log.error(`No garagedoor found.`);
-        return await devices.garagedoor.getState();
-    },
     'GET /state/weather': async () => {
         if (!devices.weather) log.error(`No weather found.`);
         return await devices.weather.getState();
     },
-    //'GET /state/lights': async () => {
-        //return await devices.bulbs.getState();
-    //},
-    //'GET /state/lights/hue': async () => {
-        //return await devices.bulbs.getHueState();
-    //},
-    //'GET /state/lights/wemo': async () => {
-        //return await devices.bulbs.getWemoState();
-    //},
-    //'GET /state/lights/etek': async () => {
-        //return await devices.bulbs.getEtekState();
-    //},
     'GET /state/times': async () => {
         let times = Times.get(true);
         let schedules = await scheduler.getSchedules();
@@ -238,49 +243,6 @@ const routes = {
     'POST /state/thermostat': async () => {
         return await devices.therm.moveTemp1();
     },
-    /*'GET /state': async () => {
-        let schedules = await scheduler.getSchedules();
-        let bulbs = await devices.getState();
-
-        if (!devices.garagedoor) log.error(`No garagedoor found.`);
-        if (!devices.therm) log.error(`No therm found.`);
-
-        let state = {
-            garagedoor: await devices.garagedoor.getState(),
-            bulbs,
-            ranges: schedules.ranges,
-            thermostat: await devices.therm.getState(),
-            times: Times.get(true),
-            cache: await dumpCache()
-        };
-
-        for (dev in bulbs){
-            let bulb = bulbs[dev];
-            let sched = schedules[dev];
-            let hist = state.bulbs.history[dev];
-            if (bulb && sched){
-                if (sched.upTime !== undefined){
-                    bulb.upTime = sched.upTime;
-                    delete sched.upTime;
-                }
-
-                if (sched.timer){
-                    bulb.timer = sched.timer;
-                    delete sched.timer;
-                }
-
-                bulb.schedule = sched;
-            }
-
-            if (bulb && hist){
-                bulb.history = hist;
-            }
-        }
-
-        delete state.bulbs.history;
-
-        return state;
-    },*/
     'DELETE /therm/away': async () => {
         return await devices.therm.set('away', false);
     },
@@ -355,8 +317,7 @@ const routes = {
 
 async function handleRequest(request, response){
     let req = request.method + ' ' + request.url.replace(/\?.*$/, '');
-    if (logGets || !req.match('^GET /state'))
-        log(`Received call at ${format(new Date())}: ${req}`);
+    log.debug(`--> ${req}`);
 
     try {
         for (let route in routes){
@@ -373,7 +334,9 @@ async function handleRequest(request, response){
                 }
 
                 let result = await routes[route].apply(null, args);
-                return result === undefined ? 200 : result;
+                return result === undefined && request.method != 'GET'
+                    ? 200 
+                    : result;
             }
             //else log(`${route} does not match ${req}`);
         }
@@ -383,35 +346,49 @@ async function handleRequest(request, response){
     }
     catch (e){
         log.error(`Caught error during request ${req}: ${e}`);
+        log.error(e.stack);
         return 500;
     }
 }
 
 function reply(res, msg){
+    log.debug(typeof msg)
     let headers = {
         'Content-type': 'application/json',
         'Access-Control-Allow-Origin': '*'
     };
 
-    if (msg === true){
+    if (msg === undefined || msg === null){
+        log.debug(`<-- 404`);
+        res.writeHead(404, headers);
+        res.end();
+    }
+    else if (msg === true){
+        log.debug(`<-- 200`);
         res.writeHead(200, headers);
         res.end();
     }
     else if (msg === false){
+        log.debug(`<-- 500`);
         res.writeHead(500, headers);
         res.end();
     }
     else if (typeof msg == 'number'){
+        log.debug(`<-- ${msg}`);
         res.writeHead(msg, headers);
         res.end();
     }
     else if (typeof msg == 'object'){
+        let out = JSON.stringify(msg);
+        log.debug(`<-- ${out}`);
         res.writeHead(200, headers);
-        res.end(JSON.stringify(msg));
+        res.end(out);
     }
     else if (typeof msg == 'string'){
+        let out = JSON.stringify({result:msg})
+        log.debug(`<-- ${out}`);
         res.writeHead(200, headers);
-        res.end(JSON.stringify({result:msg}));
+        res.end(out);
     }
 }
 

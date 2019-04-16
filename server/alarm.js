@@ -224,7 +224,7 @@ module.exports = class Alarm {
     async off(){
         try {
             log.info(`Silencing alarm.`);
-            let res = await this.send('POST', 'stop');
+            let res = await this.send('POST', 'stop_mv73bEuCCGxD');
             return true;
         }
         catch (e) {

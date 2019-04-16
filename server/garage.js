@@ -21,7 +21,7 @@ module.exports = class Garage {
     }
 
     on(time){
-        return this._open(time);
+        return this.open(time);
     }
 
     open(time){
@@ -116,6 +116,7 @@ module.exports = class Garage {
             if (tesselState.offline) return tesselState;
 
             tesselState = JSON.parse(tesselState);
+            tesselState.on = tesselState.is_open;
             tesselState.last_open_time = formatTesselDate(tesselState.last_open_time);
             tesselState.last_close_time = formatTesselDate(tesselState.last_close_time);
             tesselState.next_close_time = formatTesselDate(tesselState.next_close_time);

@@ -4,7 +4,7 @@ let log = require('./log.js')('Hue'),
 
 module.exports = class Readonly {
     constructor(config, device){
-        log.info(`Initializing ${device.name}.`);
+        log.info(`Initializing ${device.name} at ${device.ip}.`);
         this.ip = device.ip;
     }
 

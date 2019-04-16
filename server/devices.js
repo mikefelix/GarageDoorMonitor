@@ -43,38 +43,48 @@ module.exports = class Devices {
         }
 
         if (config.alarm){
-            this.devices.alarm = new Alarm(config.alarm);
+            this.alarm = this.devices.alarm = new Alarm(config.alarm);
             this.devices.alarm.fireEvent = this.eventFired.bind(this);
         }
 
-        if (config.garage){
-            this.devices.garagedoor = new Garage(config.garage);
+        /*if (config.garage){
+            this.garagedoor = this.devices.garagedoor = new Garage(config.garage);
             this.devices.garagedoor.fireEvent = this.eventFired.bind(this);
-        }
+        }*/
 
         if (config.nest){
-            this.devices.therm = new Thermostat(config.nest.thermostatId, config.nest.structureId, config.nest.token, config.useExtraFan);
+            this.therm = this.devices.therm = new Thermostat(config.nest.thermostatId, config.nest.structureId, config.nest.token, config.useExtraFan);
             this.devices.therm.fireEvent = this.eventFired.bind(this);
             this.devices.hvac = {
                 getState: async () => {
                     let thermState = await this.devices.therm.getState();
-                    return {
-                        humidity: thermState.humidity,
-                        away: thermState.away,
-                        temp: thermState.temp,
-                        target: thermState.target,
-                        state: thermState.state,
-                        mode: thermState.mode,
-                        on: thermState.state == 'heating' || thermState.state == 'cooling'
+                    if (!thermState){
+                        return {};
+                    }
+                    else {
+                        return {
+                            humidity: thermState.humidity,
+                            away: thermState.away,
+                            temp: thermState.temp,
+                            target: thermState.target,
+                            state: thermState.state,
+                            mode: thermState.mode,
+                            on: thermState.state == 'heating' || thermState.state == 'cooling'
+                        }
                     }
                 }
             };
             this.devices.housefan = {
                 getState: async () => {
                     let thermState = await this.devices.therm.getState();
-                    return {
-                        on: thermState.on,
-                        offTime: thermState.fanOffTime
+                    if (!thermState){
+                        return {};
+                    }
+                    else {
+                        return {
+                            on: thermState.on,
+                            offTime: thermState.fanOffTime
+                        }
                     }
                 }
             };
@@ -82,12 +92,12 @@ module.exports = class Devices {
         else log.error(`Not setting up thermostat.`);
 
         if (config.fermenter){
-            this.devices.fermenter = new Fermenter(config.fermenter);
+            this.fermenter = this.devices.fermenter = new Fermenter(config.fermenter);
             this.devices.fermenter.fireEvent = this.eventFired.bind(this);
         }
 
         if (config.weather){
-            this.devices.weather = new Weather(config.weather);
+            this.weather = this.devices.weather = new Weather(config.weather);
             this.devices.weather.fireEvent = this.eventFired.bind(this);
         }
 
@@ -96,6 +106,12 @@ module.exports = class Devices {
                 this.devices[dev] = new Readonly(null, {name: dev, ip: config.devices[dev]});
             }
         }
+
+        if (config.aliases){
+            this.aliases = config.aliases;
+        }
+
+        log.info(`Devices initialized: ${Object.keys(this.devices)}`);
     }
 
     reset(){
@@ -115,7 +131,7 @@ module.exports = class Devices {
             if (!this.devices[name])
                 throw 'Unknown device ' + name;
             else
-                return this.devices.on(name, reason);
+                return this.devices[name].on();
         }
     }
 
@@ -127,7 +143,7 @@ module.exports = class Devices {
             if (!this.devices[name])
                 throw 'Unknown device ' + name;
             else
-                return this.devices.off(name, reason);
+                return this.devices[name].off();
         }
     }
 
@@ -151,9 +167,24 @@ module.exports = class Devices {
         }
         else {
             let device = this.devices[name];
-            if (!device) log.error(`No device for ${name}!`);
-            return timeout(8000, {offline: true})(device.getState(), `get ${name} state`);
+            if (!device) {
+                log.error(`No device for ${name}!`);
+                return;
+            }
+            
+            let promise = device.getState().then(dev => this.transform(name, dev));
+            return timeout(8000, {offline: true})(promise, `get ${name} state`);
         }
+    }
+
+    transform(name, dev){
+        if (this.aliases[name]){
+            dev.alias = this.aliases[name];
+        }
+
+        log.debug(`Response for ${name}:`);
+        log.debug(dev);
+        return dev;
     }
 
     /*getState(){

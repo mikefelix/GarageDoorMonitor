@@ -32,12 +32,12 @@ module.exports = class Tuya {
     async _set(setting) {
         try {
             if (setting === undefined){
-                setting = !(await this.device.get({dps: swit.index}));
+                setting = !(await this.device.get({dps: this.index}));
             }
 
-            this.log.debug(`Turn ${setting ? 'on' : 'off'} ${this.name} at index ${swit.index}.`); 
-            await swit.device.set({dps: swit.index, set: setting }); 
-            let res = await swit.device.get({dps: swit.index}); 
+            this.log.debug(`Turn ${setting ? 'on' : 'off'} ${this.name} at index ${this.index}.`); 
+            await this.device.set({dps: this.index, set: setting }); 
+            let res = await this.device.get({dps: this.index}); 
             this.log.debug(`${this.name} is now ${res}.`);
             return res;
         }
