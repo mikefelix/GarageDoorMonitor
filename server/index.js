@@ -38,8 +38,17 @@ let recentLambda = false;
 process.on('uncaughtException', function (err) {
     log.error('uncaughtException: ' + err.message);
     log.error(err.stack);
-    log.error('Resetting devices.');
-    reset();
+    if (/get (.*) state/.test(err.message)){
+        let dev = err.message.match(/get (.*) state/)[1];
+        log.error(`Resetting device ${dev}.`);
+        reset(dev);
+    }
+    else if (/ECONNREFUSED ([0-9]+\.[0-9]+\.[0-9]+\.[0-9])/.test(err.message)){
+        let ip = err.message.match(/ECONNREFUSED ([0-9]+\.[0-9]+\.[0-9]+\.[0-9])/)[1];
+        log.error(`Resetting device at ${ip}.`);
+        reset(ip);
+    }
+
     //process.exit(1);
 });
 
@@ -50,8 +59,8 @@ process.on('unhandledRejection', (reason, promise) => {
 
 process.on('warning', e => console.warn(e.stack));
 
-function reset(){
-    devices.reset();
+function reset(device){
+    devices.reset(device);
 }
 
 function verifyAuth(req){
@@ -84,17 +93,31 @@ const routes = {
         }
     },
     'PUT /device/([a-z0-9_]+)': async (request, device) => {
-        scheduler.setOverride(device)
+        await scheduler.toggleOverride(device)
         await devices.on(device, request.url);
-        return await devices.getState(device);
+        let res = await devices.getState(device);
+        if (res){
+            res.overridden = await scheduler.isOverridden(device);
+        }
+
+        return res;
     },
     'DELETE /device/([a-z0-9_]+)': async (request, device) => {
+        await scheduler.toggleOverride(device)
         await devices.off(device, request.url);
-        return await devices.getState(device);
+        let res = await devices.getState(device);
+        if (res){
+            res.overridden = await scheduler.isOverridden(device);
+        }
+
+        return res;
     },
     'GET /device/([0-9a-z]+)': async (request, device) => {
         let res = await devices.getState(device);
-        log.info(res);
+        if (res){
+            res.overridden = await scheduler.isOverridden(device);
+        }
+
         return res;
     },
     'GET /scheduler/([0-9a-z]+)': async (request, device) => {
@@ -148,7 +171,7 @@ const routes = {
             devices.alarm.setTime(set, days, temp);
         }
         
-        return 200;
+        return true;
     },
     'POST /cominghome': async (request) => {
         log.info('Coming home command received.');
@@ -157,20 +180,20 @@ const routes = {
 
         devices.therm.set('away', false);
         devices.garagedoor.open(5, request.url);
-        return 200;
+        return true;
     },
     'POST /leavinghome': async (request) => {
         log.info('Leaving home command received.');
         if (Times.get().isNight) 
             devices.on('outside', 180, 'leaving home');
 
-        devices.therm.set('away', true);
-        devices.garagedoor.open(5, request.url);
-        return 200;
+        if (devices.therm) devices.therm.set('away', true);
+        if (devices.garagedoor) devices.garagedoor.open(5, request.url);
+        return true;
     },
     'POST /alive': async () => {
         log.info('Tessel reports that it is alive.');
-        return 200;
+        return true;
     },
     'POST /opened([0-9]+)?': async (request, t) => { // call from tessel
         if (!t) t = 'indefinitely';
@@ -227,7 +250,7 @@ const routes = {
         if (!devices.fermenter) log.error(`No fermenter found.`);
         return await devices.fermenter.getState();
     },
-    'GET /state/weather': async () => {
+    'GET /weather': async () => {
         if (!devices.weather) log.error(`No weather found.`);
         return await devices.weather.getState();
     },
@@ -300,7 +323,7 @@ const routes = {
 
         if (meth == 'POST'){
             if (override){
-                scheduler.setOverride(device)
+                await scheduler.setOverride(device)
             }
             
             if (action == 'revert'){

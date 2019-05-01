@@ -43,6 +43,7 @@ module.exports = function(ms, defaultVal){
                 return d;
             }).catch(e => {
                 log.error(`Error during timed promise '${action}': ${e}.`);
+                log.error(e.stack);
                 return defaultVal;
             }),
             timeoutPromise

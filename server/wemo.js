@@ -89,6 +89,7 @@ module.exports = class Wemo {
                             else if (deviceInfo){
                                 if (deviceInfo.friendlyName.toLowerCase() == name.toLowerCase()){
                                     this.log.info(`Wemo device ${deviceInfo.friendlyName} is at ${deviceInfo.host}:${deviceInfo.port}`);
+                                    this.ip = deviceInfo.host;
                                     this.client = this.underlying.client(deviceInfo);
                                     resolve(this.client);
                                 }

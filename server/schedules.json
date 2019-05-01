@@ -77,9 +77,9 @@
             "off": "coffee.power > 500 | 11:00"
         },
         "bedheat": {
-            "on": "sleepytime & home",
+            "on": "sleepytime & home & weather.temp < 60",
             "off": "!sleepytime | bedheat.power < 5",
-            "disabled": true
+            "override": true
         },
         "grow": {
             "on": "09:00",

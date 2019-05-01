@@ -25,7 +25,7 @@ module.exports = class Hue {
             }
             catch (e){
                 this.log.error(`Error getting state for ${num}: ${e}`);
-                return false;
+                return {offline: true};;
             }
         } 
 

@@ -25,6 +25,15 @@ module.exports = class Weather {
             if (res.rain)
                 weather.rain = res.rain;
 
+            function toF(temp){
+                if (temp !== undefined) 
+                    return ((temp - 273.15) * 9/5 + 32).toFixed(1);
+            }
+
+            weather.temp = toF(weather.temp);
+            weather.temp_min = toF(weather.temp_min);
+            weather.temp_max = toF(weather.temp_max);
+            
             this.cached = weather;
             setTimeout(() => delete this.cached, 1000 * 60 * 5);
 

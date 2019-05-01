@@ -18,28 +18,40 @@ module.exports = class Devices {
     constructor(config){
         this.devices = {};
         this.history = {};
-
-        let init = (underlying, conf, device) => {
-            let name = typeof device == 'string' ? device : device.name;
-            this.devices[name] = new underlying(conf, device);
-            this.devices[name].type = 'device';
-            this.history[name] = {};
-        }
+        this.deviceTypes = {};
+        this.deviceConfig = {
+            etek: config.etek,
+            hue: config.hue,
+            wemo: config.wemo,
+            tuya: config.tuya
+        };
 
         if (config.etek){
-            for (let device of (config.etek.devices || [])){ init(Etek, config.etek, device); }
+            for (let device of (config.etek.devices || [])){ 
+                this.deviceTypes[device] = 'etek';
+                this.init(device); 
+            }
         }
 
         if (config.hue){
-            for (let device of (config.hue.devices || [])){ init(Hue, config.hue, device); }
+            for (let device of (config.hue.devices || [])){ 
+                this.deviceTypes[device] = 'hue';
+                this.init(device); 
+            }
         }
 
         if (config.wemo){
-            for (let device of (config.wemo.devices || [])){ init(Wemo, config.wemo, device); }
+            for (let device of (config.wemo.devices || [])){ 
+                this.deviceTypes[device] = 'wemo';
+                this.init(device); 
+            }
         }
 
         if (config.tuya){
-            for (let device of (config.tuya.devices || [])){ init(Tuya, config.tuya, device); }
+            for (let device of (config.tuya.devices || [])){ 
+                this.deviceTypes[device] = 'tuya';
+                this.init(device); 
+            }
         }
 
         if (config.alarm){
@@ -114,8 +126,45 @@ module.exports = class Devices {
         log.info(`Devices initialized: ${Object.keys(this.devices)}`);
     }
 
-    reset(){
-        //this.bulbs.reset();
+    init(device, type) {
+        if (!type) type = this.deviceTypes[device];
+        if (!type) throw 'Unknown device type for ' + device;
+
+        let clazz;
+        if (type == 'etek')
+            clazz = Etek;
+        else if (type == 'wemo')
+            clazz = Wemo;
+        else if (type == 'hue')
+            clazz = Hue;
+        else if (type == 'tuya')
+            clazz = Tuya;
+        else
+            throw 'No constructor for type ' + type;
+
+        let conf = this.deviceConfig[type];
+        let name = typeof device == 'string' ? device : device.name;
+        this.devices[name] = new clazz(conf, device);
+        this.devices[name].type = 'device';
+        this.history[name] = {};
+    }
+
+    getDeviceNameByIp(ip){
+        for (let dev in this.devices){
+            if (this.devices[dev].ip == ip)
+                return dev;
+        }
+    }
+
+    reset(device){
+        if (device.match(/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]$/)){
+            let ip = device;
+            device = this.getDeviceNameByIp(ip);
+            if (!device) log.error(`Cannot find device by IP ${ip}.`);
+            return;
+        }
+            
+        this.init(device);
     }
 
     eventFired(event){
