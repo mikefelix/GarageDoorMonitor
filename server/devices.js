@@ -128,7 +128,10 @@ module.exports = class Devices {
 
     init(device, type) {
         if (!type) type = this.deviceTypes[device];
-        if (!type) throw 'Unknown device type for ' + device;
+        if (!type) {
+            log.error('Unknown device type for ' + device);
+            return;
+        }
 
         let clazz;
         if (type == 'etek')

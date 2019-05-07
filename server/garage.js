@@ -1,8 +1,7 @@
 let Tessel = require('./tessel.js'),
     exec = require('child_process').exec,
     format = require('./format.js'),
-    log = require('./log.js')('Garage'),
-    Times = require('./sun_times.js');
+    log = require('./log.js')('Garage');
 
 module.exports = class Garage {
     constructor(tesselUrls){

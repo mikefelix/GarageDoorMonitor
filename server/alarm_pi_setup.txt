@@ -1,0 +1,10 @@
+sudo raspi-config
+sudo apt-get install git
+sudo apt-get install nodejs
+git clone https://github.com/mikefelix/GarageDoorMonitor.git
+cd GarageDoorMonitor/alarm/
+sudo apt-get install npm
+npm i
+wget -O dogs.mp3 "http://soundbible.com/grab.php?id=1514&type=mp3"
+ln -s dogs.mp3 alarm.mp3
+sudo apt-get install omxplayer

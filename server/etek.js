@@ -283,7 +283,7 @@ class EtekClient {
 
 module.exports = class Etek {
     constructor(config, name){
-        this.log = log('Etek ' + name);
+        this.log = log('Etek ' + name/*, name == 'coffee' ? 4 : 3*/);
         this.name = name;
         this.log.info(`Initializing ${this.name}.`);
         this.client = new EtekClient(config.login, config.password, config.baseUrl, this.log);

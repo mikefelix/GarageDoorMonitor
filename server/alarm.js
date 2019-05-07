@@ -1,18 +1,8 @@
 var axios = require('axios'),
     fs = require('fs'),
     format = require('./format.js'),
-    moment = require('moment-timezone'),
+    times = require('./times.js'),
     log = require('./log.js')('Alarm');
-
-function dayNum(date, plus){
-    if (!date) date = new Date();
-    return (Math.floor(date / 8.64e7) - 18016) % 14;
-}
-
-const dayNames = [
-    'monday_odd', 'tuesday_odd', 'wednesday_odd', 'thursday_odd', 'friday_odd', 'saturday_odd', 'sunday_odd',
-    'monday_even', 'tuesday_even', 'wednesday_even', 'thursday_even', 'friday_even', 'saturday_even', 'sunday_even'
-];
 
 module.exports = class Alarm {
     constructor(addresses){
@@ -32,8 +22,7 @@ module.exports = class Alarm {
         return {
             on: (await this.getPiState()).on,
             next: {
-                day: this.hasTriggeredToday() ? 'tomorrow' : 'today',
-                enabled: this.nextEnabled(),
+                day: this.nextDay(),
                 time: this.nextTime()
             },
             time: this.timeToTrigger(),
@@ -46,24 +35,30 @@ module.exports = class Alarm {
             },
             settings: this.config.settings,
             override: this.config.override,
-            today: dayNames[dayNum()]
+            today: times.dayNum(),
+            todayName: times.dayName()
         };
     }
 
-    nextEnabled(){
-        if (this.config.override && this.config.override.disable){
-            return false;
+    nextDay(){
+        let i = !this.hasTriggeredToday() ? 0 : 1
+        if (this.config.override){
+            if (this.config.override.days){
+                i += this.config.override.days;
+            }
         }
-        
-        return this.nextTime() != null;
+
+        return times.dayNum(i);
     }
 
     nextTime(){
-        if (this.config.override && this.config.override.time){
-            return this.config.override.time;
+        if (this.config.override){
+            if (this.config.override.time){
+                return this.config.override.time;
+            }
         }
 
-        let day = dayNum(new Date(), !this.hasTriggeredToday() ? 0 : 1);
+        let day = times.dayNum(!this.hasTriggeredToday() ? 0 : 1);
         return this.config.settings[day];
     }
 
@@ -79,7 +74,7 @@ module.exports = class Alarm {
     }
 
     enabledForToday(){
-        return this.config.settings[dayNum()] != null;
+        return this.config.settings[times.dayNum()] != null;
     }
 
     ringTimeToday(){
@@ -95,7 +90,7 @@ module.exports = class Alarm {
                 return "";
         }
 
-        return this.config.settings[dayNum()] || "06:00";
+        return this.config.settings[times.dayNum()] || "06:00";
     }
 
     timeToTrigger(){
@@ -103,35 +98,31 @@ module.exports = class Alarm {
             return this.config.override.time;
         }
 
-        return this.config.settings[dayNum()] || "06:00";
+        return this.config.settings[times.dayNum()] || "06:00";
     }
 
-    setTime(time, days, override){
+    setTime(time, day, override){
         if (override){
-            this.config.override = {days, time};
+            this.config.override = {day, time};
         }
         else {
-            for (let index in this.config.settings){
-                if (days.indexOf(index) >= 0){
-                    log.info(`Set alarm time to ${time} for day ${index}.`);
-                    this.config.settings[index] = time;
-                }
-            }
+            log.info(`Set alarm time to ${time} for day ${day}.`);
+            this.config.settings[day] = time;
         }
 
         this._writeFile();
     }
 
-    enable(days){
-        this._setEnabled(true, days);
+    enable(day){
+        this._setEnabled(true, day);
     }
 
-    disable(days, override){
+    disable(day, override){
         if (override){
-            this.config.override = {days, disable: true};
+            this.config.override = {day, disable: true};
         }
         else {
-            this._setEnabled(false, days);
+            this._setEnabled(false, day);
         }
 
         this._writeFile();
@@ -224,15 +215,11 @@ module.exports = class Alarm {
         }
     }
 
-    _setEnabled(enabled, days){
-        for (let index in this.config.settings){
-            if (days.indexOf(index) >= 0){
-                let setting = this.config.settings[index] != null;
-                if (setting != enabled){
-                    log.info(`Set alarm enabled to ${enabled} for day ${index}.`);
-                    this.config.settings[index] = enabled ? "08:00" : null;
-                }
-            }
+    _setEnabled(enabled, day){
+        let setting = this.config.settings[day] != null;
+        if (setting != enabled){
+            log.info(`Set alarm enabled to ${enabled} for day ${day}.`);
+            this.config.settings[day] = enabled ? "08:00" : null;
         }
     }
 

@@ -1,7 +1,7 @@
 const moment = require('moment-timezone'),
       format = require('./format.js'),
       kafka = require('kafka-node'),
-      client = new kafka.KafkaClient({kafkaHost: 'localhost:9092'}),
+      //client = new kafka.KafkaClient({kafkaHost: 'localhost:9092'}),
       producer = {on:()=>{}},//*/new kafka.Producer(client),
       pad = 35;
 
@@ -52,11 +52,11 @@ module.exports = function(segment, filterLevel){
         }
     };
 
-    logIt.error = function(msg) { return logIt(1, msg); };
-    logIt.warn = function(msg) { return logIt(2, msg); };
-    logIt.info = function(msg) { return logIt(3, msg); };
-    logIt.debug = function(msg) { return logIt(4, msg); };
-    logIt.trace = function(msg) { return logIt(5, msg); };
+    logIt.error = logIt.bind(null, 1);
+    logIt.warn = logIt.bind(null, 2);
+    logIt.info = logIt.bind(null, 3);
+    logIt.debug = logIt.bind(null, 4);
+    logIt.trace = logIt.bind(null, 5);
     logIt.setLevel = function(level) { filterLevel = level; };
 
     return logIt;

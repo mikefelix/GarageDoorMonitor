@@ -7,17 +7,22 @@ function get(formatted){
     let tz = 'America/Denver'; // Was I using this?
     let now = moment();
     let times = suncalc.getTimes(now, 40.7608, -111.891);
+    
     let sr = moment(Date.parse(times.sunrise));
     sr.date(now.date());
     let sunrise = new Date(sr); 
+
     let ss = moment(Date.parse(times.sunsetStart));
     ss.date(now.date());
     let sunset = new Date(ss);
+
     let fourAm = moment().startOf('day').add(4, 'hours').toDate();
     now = now.toDate();
 
     return {
         current: formatted ? format(now) : now,
+        today: dayNames[dayNum()],
+        todayNum: dayNum(),
         isNight: now.getTime() < sunrise || now.getTime() > sunset,
         sunrise: formatted ? format(sunrise) : sunrise,
         sunset: formatted ? format(sunset) : sunset,
@@ -25,22 +30,33 @@ function get(formatted){
     };
 }
 
+const dayNames = [
+    'monday_odd', 'tuesday_odd', 'wednesday_odd', 'thursday_odd', 'friday_odd', 'saturday_odd', 'sunday_odd',
+    'monday_even', 'tuesday_even', 'wednesday_even', 'thursday_even', 'friday_even', 'saturday_even', 'sunday_even'
+];
+
 const simpleTimeRegex = /^([0-9]+):([0-9]+)$/;
 const tomorrowTimeRegex = /^\+([0-9]+):([0-9]+)$/;
 const modifiedTimeRegex = /^([0-9]+):([0-9]+)([-+])([0-9]+)$/;
 const namedTimeRegex = /^([a-z][a-z0-9_]*)$/;
 const modifiedNamedTimeRegex = /^([a-z0-9_]+)([-+])([0-9]+)$/;
 
+function dateFromNow(formatted, unit, num){
+    let date = moment().startOf('day').add(num, unit);
+    return formatted ? format(date, 'HH:mm') : date;
+}
+
+function dayNum(plus, date){
+    date = moment(date).startOf('day').add(plus || 0, 'days');;
+    return (Math.floor(date / 8.64e7) - 18015) % 14;
+}
+
+function dayName(){
+    return dayNames[dayNum()];
+}
+
 function toHoursAndMinutes(text){
     return format(parse(text), 'HH:mm');
-}
-
-function getMinutesFromNow(mins){
-    return format(moment().add(mins, 'minutes').toDate(), 'HH:mm');
-}
-
-function currentMinute(){
-    return format(new Date(), 'HH:mm');
 }
 
 function parse(date){
@@ -165,7 +181,7 @@ function currentTimeAtOrAfter(time){
     }
 
     let [a, hour, minute] = time.match(/([0-9]+):([0-9]+)/);
-    let [b, nowHour, nowMinute] = currentMinute().match(/([0-9]+):([0-9]+)/);
+    let [b, nowHour, nowMinute] = dateFromNow(true, 'minutes', 0).match(/([0-9]+):([0-9]+)/);
 
     hour = +hour; nowHour = +nowHour; minute = +minute; nowMinute = +nowMinute;
     if (hour < 3) hour = hour + 24;
@@ -177,10 +193,22 @@ function currentTimeAtOrAfter(time){
 module.exports = { 
     get, 
     parse, 
+    dayNum,
+    dayName,
     isBetween, 
-    toHoursAndMinutes,
-    getMinutesFromNow,
-    currentMinute,
+    toHM: toHoursAndMinutes,
     currentTimeIs,
-    currentTimeAtOrAfter
+    currentTimeAtOrAfter,
+    getDate: {
+        current: dateFromNow.bind(null, false, 'minutes', 0),
+        minutesFromNow: dateFromNow.bind(null, false, 'minutes'),
+        hoursFromNow: dateFromNow.bind(null, false, 'hours'),
+        daysFromNow: dateFromNow.bind(null, false, 'days')
+    },
+    getHM: {
+        current: dateFromNow.bind(null, true, 'minutes', 0),
+        minutesFromNow: dateFromNow.bind(null, true, 'minutes'),
+        hoursFromNow: dateFromNow.bind(null, true, 'hours'),
+        daysFromNow: dateFromNow.bind(null, true, 'days')
+    }
 };

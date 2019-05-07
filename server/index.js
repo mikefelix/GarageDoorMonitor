@@ -22,7 +22,7 @@ let http = require("http"),
     Fermenter = require('./fermenter.js'),
     Devices = require('./devices.js'),
     Tuya = require('./tuya.js'),
-    Times = require('./sun_times.js');
+    Times = require('./times.js');
 
 const logGets = false;
 
@@ -43,8 +43,8 @@ process.on('uncaughtException', function (err) {
         log.error(`Resetting device ${dev}.`);
         reset(dev);
     }
-    else if (/ECONNREFUSED ([0-9]+\.[0-9]+\.[0-9]+\.[0-9])/.test(err.message)){
-        let ip = err.message.match(/ECONNREFUSED ([0-9]+\.[0-9]+\.[0-9]+\.[0-9])/)[1];
+    else if (/ECONNREFUSED [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/.test(err.message)){
+        let ip = err.message.match(/ECONNREFUSED ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/)[1];
         log.error(`Resetting device at ${ip}.`);
         reset(ip);
     }
@@ -157,18 +157,18 @@ const routes = {
         devices.alarm.on();
         return 200;
     },
-    'POST /alarm/(t?[0-9]+)/([0-9]+:[0-9]+|on|off)': async (request, days, set) => {
-        let temp = days.indexOf('t') >= 0;
-        days = days.replace(/[^0-9]/, '');
+    'POST /alarm/(t?[0-9]+)/([0-9]+:[0-9]+|on|off)': async (request, day, set) => {
+        let temp = day.indexOf('t') >= 0;
+        day = day.replace(/[^0-9]/, '');
 
         if (set == 'on'){
-            devices.alarm.enable(days, temp);
+            devices.alarm.enable(day, temp);
         }
         else if (set == 'off'){
-            devices.alarm.disable(days, temp);
+            devices.alarm.disable(day, temp);
         }
         else {
-            devices.alarm.setTime(set, days, temp);
+            devices.alarm.setTime(set, day, temp);
         }
         
         return true;
@@ -254,7 +254,7 @@ const routes = {
         if (!devices.weather) log.error(`No weather found.`);
         return await devices.weather.getState();
     },
-    'GET /state/times': async () => {
+    'GET /times': async () => {
         let times = Times.get(true);
         let schedules = await scheduler.getSchedules();
         return { times, schedules };

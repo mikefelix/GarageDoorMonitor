@@ -8,7 +8,7 @@ let format = require('./format.js'),
     rget = util.promisify(redis.get).bind(redis),
     rset = redis.set.bind(redis),
     rdel = redis.del.bind(redis),
-    Times = require('./sun_times.js');
+    Times = require('./times.js');
 
 function debug(section, msg){
     //if (!section || section == 'office')
@@ -141,7 +141,7 @@ module.exports = class Scheduler {
     }
 
     async checkAll(){
-        let minute = Times.currentMinute();
+        let minute = Times.getHM.current();
         this.state = {};
 
         if (minute == this.reset){
@@ -286,7 +286,7 @@ module.exports = class Scheduler {
                     debug(`schedule, There is already a timer running for ${schedule}.`);
                 }
                 else {
-                    let minute = Times.getMinutesFromNow(time);
+                    let minute = Times.getHM.minutesFromNow(time);
                     log.info(`Creating ${spec} timer for ${time} minutes from now (${minute}) for ${schedule} because its power is ${device.power} which is greater than ${threshold}.`);
                     rset(`timer:${schedule}`, `${spec}=${minute}`);
                 }
@@ -302,7 +302,7 @@ module.exports = class Scheduler {
         return async (device) => {
             let timer = await rget('timer:' + schedule);
             if (!timer || Times.currentTimeAtOrAfter(timer)){
-                let time = Times.getMinutesFromNow(period);
+                let time = Times.getHM.minutesFromNow(period);
                 log.info(`Next activation of ${schedule} will be at ${time}.`);
                 rset('timer:' + schedule, time);
                 return true;
@@ -328,7 +328,7 @@ module.exports = class Scheduler {
                         debug(`schedule, There is already a timer running for ${schedule}.`);
                     }
                     else {
-                        let minute = Times.getMinutesFromNow(time);
+                        let minute = Times.getHM.minutesFromNow(time);
                         log.info(`Creating ${spec} timer for ${time} minutes from now (${minute}) for ${schedule} because it is ${device.on ? 'on' : 'off'}${condition ? ' and condition ' + condition + ' is met' : ''}.`);
                         rset(`timer:${schedule}`, `${spec}=${minute}`);
                     }
@@ -556,7 +556,7 @@ module.exports = class Scheduler {
             return this.parseTrigger(schedule, spec, this.aliases[trigger]);
         }
 
-        let time = Times.toHoursAndMinutes(trigger);
+        let time = Times.toHM(trigger);
         if (time) {
             debug(schedule, `${schedule} will turn ${spec} today at ${time}.`);
             return async () => {
@@ -614,7 +614,7 @@ module.exports = class Scheduler {
             return false;
         }
 
-        let maybeTime = Times.toHoursAndMinutes(val + (adj || ''));
+        let maybeTime = Times.toHM(val + (adj || ''));
         if (maybeTime) 
             return maybeTime;
 
@@ -652,19 +652,19 @@ module.exports = class Scheduler {
                 return undefined;
             }
 
-            debug(obj, `Convert ${val} to hours/minutes format. ${Times.toHoursAndMinutes(val)}`);
-            return Times.toHoursAndMinutes(val);
+            debug(obj, `Convert ${val} to hours/minutes format. ${Times.toHM(val)}`);
+            return Times.toHM(val);
         }
         else {
-            debug(undefined, `Convert spec ${prop} to hours/minutes format. ${Times.toHoursAndMinutes(prop)}`);
-            return Times.toHoursAndMinutes(prop);
+            debug(undefined, `Convert spec ${prop} to hours/minutes format. ${Times.toHM(prop)}`);
+            return Times.toHM(prop);
         }
     }
 
     _readFile(){
         log(`Read file.`);
         let file = JSON.parse(fs.readFileSync(this.file));
-        this.reset = Times.toHoursAndMinutes(file.reset);
+        this.reset = Times.toHM(file.reset);
         this.schedules = file.schedules;
         this.ranges = file.ranges;
         this.aliases = file.aliases;

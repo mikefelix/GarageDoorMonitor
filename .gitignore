@@ -1,4 +1,7 @@
-node_modules
-*.class
-/garager/platforms
-build.sh
+/server/_alarm.json
+/server/config.json
+/server/schedules.json
+/server/node_modules
+config.json
+_alarm.json
+schedules.json
