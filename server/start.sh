@@ -6,7 +6,7 @@ else
     level=$1
 fi
 
-pat="^[0-9]+:[0-9]+:[4-5].+$"
+pat="^[0-9]+:[0-9]+:[5].+$"
 
 while sleep 2; do 
     d=`date`

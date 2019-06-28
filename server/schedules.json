@@ -3,7 +3,7 @@
     "ranges": {
         "day": {
             "start": "sunrise",
-            "end": "sunset-30"
+            "end": "sunset-45"
         },
         "night": {
             "start": "sunset-30",
@@ -20,7 +20,11 @@
     }, 
     "aliases": {
         "home": "!hvac.away | phone | phone2 | phone3",
-        "computer": "bigcomputer | littlecomputer"
+        "computer": "bigcomputer | littlecomputer",
+        "hotinside": "therm.temp >= 75",
+        "coldinside": "therm.temp <= 65",
+        "uncomfortable": "hotinside | coldinside",
+        "nearTargetTemp": "hvac.nearTarget & !hvac.on"
     },
     "groups": {
         "bed": ["bedlamp", "bedheat"],
@@ -30,7 +34,7 @@
         "coffee": {
             "on": "alarm.time-10",
             "off": "/60 & coffee.power < 500",
-            "override": "switchon,on"
+            "override": "false"
         },
         "piano": {
             "off": "1~120"
@@ -59,10 +63,10 @@
         },
         "wine": {
             "on": "sunset",
-            "off": "23:52" 
+            "off": "23:45" 
         },
         "housefan": {
-            "on": "!earlymorn & !hvac.on & hvac.nearTarget"
+            "on": "!earlymorn & nearTargetTemp & uncomfortable"
         },
         "vent": {
             "on": "housefan.on",
@@ -77,13 +81,12 @@
             "off": "coffee.power > 500 | 11:00"
         },
         "bedheat": {
-            "on": "sleepytime & home & weather.temp < 60",
+            "on": "sleepytime & home & weather.temp < 50",
             "off": "!sleepytime | bedheat.power < 5",
             "override": true
         },
         "grow": {
-            "on": "09:00",
-            "off": "21:00"
+            "off": "/1"
         },
         "scent": {
             "on": "!sleepytime & !hvac.away & /10",

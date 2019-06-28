@@ -19,11 +19,14 @@ module.exports = class Alarm {
     }
 
     async getState(){
+        let pi = await this.getPiState();
+
         return {
-            on: (await this.getPiState()).on,
+            on: pi ? pi.on : false,
             next: {
                 day: this.nextDay(),
-                time: this.nextTime()
+                time: this.nextTime(), 
+                overridden: this.config.override != null
             },
             time: this.timeToTrigger(),
             hasTriggeredToday: this.hasTriggeredToday(),
@@ -43,8 +46,8 @@ module.exports = class Alarm {
     nextDay(){
         let i = !this.hasTriggeredToday() ? 0 : 1
         if (this.config.override){
-            if (this.config.override.days){
-                i += this.config.override.days;
+            if (this.config.override.disabled){
+                i += +this.config.override.days;
             }
         }
 
@@ -117,12 +120,12 @@ module.exports = class Alarm {
         this._setEnabled(true, day);
     }
 
-    disable(day, override){
+    disable(days, override){
         if (override){
-            this.config.override = {day, disable: true};
+            this.config.override = {days, disable: true};
         }
         else {
-            this._setEnabled(false, day);
+            this._setEnabled(false, days);
         }
 
         this._writeFile();
@@ -169,6 +172,7 @@ module.exports = class Alarm {
 
         // Todo: enable via override when disabled.
         if (!this.enabledForToday()){
+            log.info('Not ringing because alarm is disabled.');
             ring = false;
             this.config.lastTriggeredAction = 'disabled';
         }
@@ -188,8 +192,8 @@ module.exports = class Alarm {
             
         if (ring){
             try {
-                let res = await this.send('POST', 'go');
                 log.info(`Ringing alarm.`);
+                let res = await this.send('POST', 'go');
                 this.config.lastTriggeredAction = 'rung';
             }
             catch (e) {
@@ -197,6 +201,9 @@ module.exports = class Alarm {
                 this.config.lastTriggeredAction = 'errored';
                 return false;
             }
+        }
+        else {
+            log.info('Not ringing.');
         }
 
         this._writeFile();

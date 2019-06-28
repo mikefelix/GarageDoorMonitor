@@ -39,24 +39,48 @@ module.exports = class Scheduler {
 
         this.file = file;
         this.devices = devices;
+        this.history = {};
 
         this._readFile();
         this.checkAll();
         setInterval(this.checkAll.bind(this), 60000);
     }
 
+    async record(schedule, turnedOn, reason, setOverride){
+        let action = turnedOn ? 'on' : 'off'
+            
+        if (setOverride)
+            await this.setOverride(schedule);
+
+        let hist = this.history[schedule];
+        if (!hist) hist = this.history[schedule] = {};
+
+        let time = Times.get(true).current;
+        let text = `@${time} for reason: ${reason}`;
+
+        log.debug(`Adding history for ${schedule}/${action} at ${time}: ${reason}.`);
+        hist[action] = text;
+        log.debug(this.history);
+    }
+
     async on(schedule, reason){
         let success = await this.devices.on(schedule, reason);
         if (success) {
+            this.record(schedule, true, reason);
             (await this.getState(schedule)).on = true;
         }
+
+        return success;
     }
 
     async off(schedule, reason){
         let success = await this.devices.off(schedule, reason);
         if (success) {
+            this.record(schedule, false, reason);
             (await this.getState(schedule)).on = false;
         }
+
+        return success;
     }
 
     async getState(name) {
@@ -76,7 +100,10 @@ module.exports = class Scheduler {
                 return;
             }
 
+            state.schedule = this.getSchedule(name);
             state.overridden = await this.isOverridden(name);
+            state.history = this.history[name];
+
             if (this.state){
                 this.state[name] = state;
             }
@@ -232,6 +259,10 @@ module.exports = class Scheduler {
         }
     }
 
+    getSchedule(name){
+        return this.schedules[name];
+    }
+
     async getSchedules(){
         let schedules = {};
         for (let sched in this.schedules) {
@@ -270,7 +301,7 @@ module.exports = class Scheduler {
         let ranges = this.ranges;
         for (let r in ranges){
             if (ranges.hasOwnProperty(r)){
-                ranges[r].active = this.rangeActive(r);
+                ranges[r].active = await this.rangeActive(r);
             }
         }
 
@@ -524,7 +555,6 @@ module.exports = class Scheduler {
             return false;
 
         let between = Times.isBetween(start, end);
-        debug(name, `In range ${name}: ${between}`);
         return between;
     }
 
@@ -558,7 +588,7 @@ module.exports = class Scheduler {
 
         let time = Times.toHM(trigger);
         if (time) {
-            debug(schedule, `${schedule} will turn ${spec} today at ${time}.`);
+            log.info(`${schedule} will turn ${spec} today at ${time}.`);
             return async () => {
                 let match = Times.currentTimeIs(time);
                 debug(schedule, `${schedule}: current time is ${match ? '' : ' not'} ${time}.`);
@@ -718,5 +748,9 @@ module.exports = class Scheduler {
 
     async testTrigger(trig){
    
+    }
+
+    logAt(level){
+        log.setLevel(level);
     }
 }

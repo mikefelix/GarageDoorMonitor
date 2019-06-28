@@ -283,7 +283,7 @@ class EtekClient {
 
 module.exports = class Etek {
     constructor(config, name){
-        this.log = log('Etek ' + name/*, name == 'coffee' ? 4 : 3*/);
+        this.log = log('Etek ' + name);
         this.name = name;
         this.log.info(`Initializing ${this.name}.`);
         this.client = new EtekClient(config.login, config.password, config.baseUrl, this.log);
@@ -314,7 +314,7 @@ module.exports = class Etek {
         }
         catch (e){
             this.log.error(`Can't connect to etek for device ${this.name}. ${e}`);
-            return {};
+            return {offline: true};
         }
     }
 

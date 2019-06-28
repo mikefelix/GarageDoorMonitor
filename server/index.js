@@ -16,7 +16,6 @@ let http = require("http"),
     mail = require('./mail.js').send,
     Garage = require('./garage.js'),
     Scheduler = require('./scheduler.js'),
-    Weather = require('./weather.js'),
     Thermostat = require('./thermostat.js'),
     Alarm = require('./alarm.js'),
     Fermenter = require('./fermenter.js'),
@@ -43,8 +42,8 @@ process.on('uncaughtException', function (err) {
         log.error(`Resetting device ${dev}.`);
         reset(dev);
     }
-    else if (/ECONNREFUSED [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/.test(err.message)){
-        let ip = err.message.match(/ECONNREFUSED ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/)[1];
+    else if (/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/.test(err.message)){
+        let ip = err.message.match(/([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/)[1];
         log.error(`Resetting device at ${ip}.`);
         reset(ip);
     }
@@ -64,8 +63,8 @@ function reset(device){
 }
 
 function verifyAuth(req){
-    log.debug(`verify ${req.url}. ${Object.keys(req.headers)}`);
-    if (req.method == 'GET' || req.url.match(/^\/(test|warn)/))
+    log.debug(`verify ${req.url}. Authorization: ${req.headers.authorization}. ${Object.keys(req.headers)}`);
+    if (req.method == 'GET' || req.url.match(/^\/(test|warn|log)/))
         return true;
     if (req.method == 'POST' && /^\/(opened|closed|alive|garage-error)/.test(req.url))
         return true;
@@ -86,36 +85,45 @@ async function dumpCache(){
     return ret;
 }
 
+async function currentWeather(){
+    return await devices.weather.getState();
+}
+
 const routes = {
     'GET /devicegroups': async () => {
         return {
             groups: config.rooms
         }
     },
-    'PUT /device/([a-z0-9_]+)': async (request, device) => {
-        await scheduler.toggleOverride(device)
-        await devices.on(device, request.url);
+    'PUT /(l)?device/([a-z0-9_]+)': async (request, lock, device) => {
+        await devices.on(device)
+        await scheduler.record(device, true, request.url, !!lock);
+
         let res = await devices.getState(device);
-        if (res){
-            res.overridden = await scheduler.isOverridden(device);
-        }
+        if (!res)
+            return 404;
+        
+        res.overridden = await scheduler.isOverridden(device);
 
         return res;
     },
-    'DELETE /device/([a-z0-9_]+)': async (request, device) => {
-        await scheduler.toggleOverride(device)
-        await devices.off(device, request.url);
+    'DELETE /(l)?device/([a-z0-9_]+)': async (request, lock, device) => {
+        await devices.off(device)
+        await scheduler.record(device, false, request.url, !!lock);
+
         let res = await devices.getState(device);
-        if (res){
-            res.overridden = await scheduler.isOverridden(device);
-        }
+        if (!res)
+            return 404;
+        
+        res.overridden = await scheduler.isOverridden(device);
 
         return res;
     },
     'GET /device/([0-9a-z]+)': async (request, device) => {
-        let res = await devices.getState(device);
-        if (res){
-            res.overridden = await scheduler.isOverridden(device);
+        let res = await scheduler.getState(device);
+        if (!res){
+            log.warn(`Needed to fall back to devices for ${device}.`);
+            res = await devices.getState(device);
         }
 
         return res;
@@ -125,6 +133,7 @@ const routes = {
     },
     'GET /test': async () => {
         log.info('testing');
+        return true;
     },
     'POST /test': async () => {
     },
@@ -144,10 +153,10 @@ const routes = {
         log.error(Object.keys(request));
     },
     'GET /alarm': async () => {
-        return devices.alarm.getState();
+        return await devices.alarm.getState();
     },
     'PUT /alarm': async () => {
-        return devices.alarm.getState();
+        return await devices.alarm.getState();
     },
     'POST /alarm/stop_mv73bEuCCGxD': async () => {
         devices.alarm.off();
@@ -175,7 +184,7 @@ const routes = {
     },
     'POST /cominghome': async (request) => {
         log.info('Coming home command received.');
-        if (Times.get().isNight) 
+        if (Times.get(false, await currentWeather()).isNight) 
             devices.on('outside', 180, 'coming home');
 
         devices.therm.set('away', false);
@@ -184,7 +193,7 @@ const routes = {
     },
     'POST /leavinghome': async (request) => {
         log.info('Leaving home command received.');
-        if (Times.get().isNight) 
+        if (Times.get(false, await currentWeather()).isNight) 
             devices.on('outside', 180, 'leaving home');
 
         if (devices.therm) devices.therm.set('away', true);
@@ -198,7 +207,7 @@ const routes = {
     'POST /opened([0-9]+)?': async (request, t) => { // call from tessel
         if (!t) t = 'indefinitely';
 
-        if (Times.get().isNight)
+        if (Times.get(false, await currentWeather()).isNight)
             devices.on('outside', 180, 'garage opened at night');
 
         log.info(`Tessel reports opened ${t} state.`);
@@ -217,20 +226,41 @@ const routes = {
     'POST /open([0-9]*)': async (request, time) => { // call from user
         return await devices.garagedoor.open(time, request.url);
     },
+    'GET /beer': async () => {
+        if (!devices.fermenter) log.error(`No fermenter found.`);
+        return await devices.fermenter.getState();
+    },
+    /*'DELETE /beer': async () => {
+        if (!devices.fermenter) log.error(`No fermenter found.`);
+        devices.fermenter.off();
+        return await devices.fermenter.getState();
+    },
     'PUT /beer/heater': async (request) => {
-        return await devices.fermenter.heater(true);
-    },
+        let res = await devices.fermenter.heater(true);
+        if (res)
+            return await devices.fermenter.getState();
+        else
+            return 500;
+    },*/
     'DELETE /beer/heater': async (request) => {
-        return await devices.fermenter.heater(false);
+        log.debug('Received heater off request.');
+        let res = await devices.fermenter.heater(false);
+        if (res)
+            return await devices.fermenter.getState();
+        else
+            return 500;
     },
-    'POST /beer/([^/]+)/([0-9.]+)': async (request, setting, temp) => { 
-        let drift = false;
-        if (setting.match(/drift/)){
-            setting = setting.replace('drift', '');
-            drift = true;
+    'POST /beer/([^/]+)/?([0-9.]+)?': async (request, setting, temp) => { 
+        log.debug(`Received beer setting: ${setting} ${temp}`);
+        if (setting == 'off'){
+            return await devices.fermenter.off();
         }
 
-        return await devices.fermenter.set(setting, temp, drift);
+        if (!temp){
+            return 500;
+        }
+
+        return await devices.fermenter.set(setting, temp);
     },
     'GET /state/cache': async () => {
         return await dumpCache();
@@ -246,16 +276,20 @@ const routes = {
     'GET /state/history': async () => {
         return await history.getEvents(10);
     },
-    'GET /state/beer': async () => {
-        if (!devices.fermenter) log.error(`No fermenter found.`);
-        return await devices.fermenter.getState();
-    },
     'GET /weather': async () => {
-        if (!devices.weather) log.error(`No weather found.`);
-        return await devices.weather.getState();
+        let outside;
+        let inside;
+
+        if (devices.weather)
+            outside = await devices.weather.getState();
+
+        if (devices.therm)
+            inside = await devices.therm.getState();
+
+        return { inside, outside }; 
     },
     'GET /times': async () => {
-        let times = Times.get(true);
+        let times = Times.get(true, await currentWeather());
         let schedules = await scheduler.getSchedules();
         return { times, schedules };
     },
@@ -282,7 +316,7 @@ const routes = {
         return await devices.therm.set('fan', duration);
     },
     'POST /button/([0-9]+)': async (request, date) => { // Call from AWS Lambda
-        if (Times.get().isNight){
+        if (Times.get(false, await currentWeather()).isNight){
             if (!recentLambda){
                 log(`IoT button pressed at night; turning on outside bulbs. ${date}`);
                 await devices.bulbs.on('outside', 180, 'IoT button');
@@ -313,6 +347,20 @@ const routes = {
     'POST /nesthome': async () => {
         log("Nest reports people coming home.");
         return "Got it.";
+    },
+    'POST /log/([a-zA-Z]+)/([1-5])': async (request, module, level) => {
+        if (module == 'devices') 
+            devices.logAt(level);
+        else if (module == 'main')
+            log.setLevel(level);
+        else if (module == 'schedule' || module == 'scheduler')
+            scheduler.logAt(level);
+        else if (devices[module])
+            devices[module].logAt(level);
+        else
+            return 400;
+
+        return true;
     },
     '(POST|GET) /devices/([a-z0-9_]+)/((force)?(on|off|revert))': async (request, meth, device, action) => {
         override = action.match(/force/);

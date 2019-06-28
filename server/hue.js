@@ -80,7 +80,7 @@ module.exports = class Hue {
                         reject(err);
                     }
                     else {
-                        this.log.warn('Retrying', url);
+                        this.log.warn('Retrying ' + url);
                         this._req(method, url, body, true)
                           .then(res2 => resolve(res2))
                           .catch(err2 => reject(err2));

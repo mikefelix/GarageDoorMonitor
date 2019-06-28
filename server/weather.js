@@ -1,4 +1,5 @@
 let axios = require("axios"),
+    Times = require("./times.js"),
     log = require("./log.js")("Weather");
         
 module.exports = class Weather {
@@ -25,15 +26,23 @@ module.exports = class Weather {
             if (res.rain)
                 weather.rain = res.rain;
 
+            if (res.clouds && res.clouds.all)
+                weather.clouds = res.clouds.all;
+
             function toF(temp){
                 if (temp !== undefined) 
                     return ((temp - 273.15) * 9/5 + 32).toFixed(1);
             }
 
+            let times = Times.get();
             weather.temp = toF(weather.temp);
             weather.temp_min = toF(weather.temp_min);
             weather.temp_max = toF(weather.temp_max);
-            
+            weather.night = times.isNight;
+            weather.sunrise = times.sunrise;
+            weather.sunset = times.sunset;
+            weather.trueSunset = times.trueSunset;
+
             this.cached = weather;
             setTimeout(() => delete this.cached, 1000 * 60 * 5);
 

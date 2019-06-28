@@ -20,7 +20,7 @@
         "baseUrl": "https://server1.vesync.com:4007",
         "login": "michael.felix@gmail.com", 
         "password": "4vpvkTGX41Ay5VK",
-        "devices": ["coffee", "wine", "piano", "aquarium", "bedheat", "grow", "office"],
+        "devices": ["coffee", "wine", "piano", "aquarium", "bedheat", "grow", "office", "floorlamp"],
         "meterBulbs": ["coffee", "bedheat", "piano"]
     },
     "nest": {
@@ -29,32 +29,32 @@
         "token": "c.E7APpbqdmTJaPRI0ZnojtdIUFOjMOQyqWjV0WBmIuOBTASWrXg7AlFjAmVKxQ2wUasO0hq9AbyhZ3bbPf22QakzvNLMypjuO5QzFEwqrDjqMtiiNgE7oMUIWAJjkQoBYl83TYt7l0FPNUwmP"
     },
     "weather": "https://api.openweathermap.org/data/2.5/weather?id=5778755&APPID=4baebedec5d766f259f6852bc3353d4e",
-    "fermenter": "https://mozzarelly.com/brewpi/socketmessage.php",
+    "fermenter": "http://192.168.0.101/brewpi/socketmessage.php",
     "tuya": {
         "devices": [
             {
-                "name": "bedlamp",
+                "name": "bedlamp_dead",
                 "ip": "192.168.0.150",
                 "id": "10670365bcddc2fa7def",
                 "key": "dd45ee2bcad6b095",
                 "index": 1
             },
             {
-                "name": "charger",
+                "name": "charger_dead",
                 "ip": "192.168.0.150",
                 "id": "10670365bcddc2fa7def",
                 "key": "dd45ee2bcad6b095",
                 "index": 2
             },
             {
-                "name": "floorlamp",
+                "name": "bedlamp",
                 "ip": "192.168.0.136",
                 "id": "10670365bcddc2fa7d79",
                 "key": "773f379a50fced17",
                 "index": 1
             },
             {
-                "name": "scent",
+                "name": "charger",
                 "ip": "192.168.0.136",
                 "id": "10670365bcddc2fa7d79",
                 "key": "773f379a50fced17",
@@ -72,47 +72,29 @@
     "rooms": [
         {
             "name": "bedroom",
-            "devices": [
-                "bedheat",
-                "bedlamp",
-                "charger",
-                "stereo"
-            ]
+            "devices": [ "bedheat", "bedlamp", "charger", "stereo" ]
         },
         {
             "name": "living room",
-            "devices": [
-                "floorlamp",
-                "couchlamp",
-                "aquarium",
-                "wine"
-            ]
+            "devices": [ "floorlamp", "couchlamp", "aquarium", "wine" ]
         },
         {
             "name": "garage",
-            "devices": [
-                "garagedoor",
-                "outside"
-            ]
+            "devices": [ "garagedoor", "outside" ]
         },
         {
             "name": "basement",
-            "devices": [
-                "grow",
-                "heater"
-            ]
+            "devices": [ "grow", "heater" ]
         },
         {
             "name": "other",
             "collapsed": true,
-            "devices": [
-                "fan",
-                "vent",
-                "office",
-                "coffee",
-                "piano",
-                "scent"
-            ]
+            "devices": [ "fan", "vent", "office", "coffee", "piano" ]
+        },
+        {
+            "name": "devices",
+            "collapsed": true,
+            "devices": [ "phone", "phone2", "phone3", "bigcomputer", "littlecomputer" ]
         }
     ],
     "aliases":{
@@ -121,8 +103,10 @@
         "bedheat": "Bed",
         "bedlamp": "Lamp",
         "garagedoor": "Door",
-        "outside": "Lights"
+        "outside": "Lights",
+        "phone2": "Mike phone",
+        "phone": "Lily phone"
     },
-    "useExtraFan": false,
+    "useExtraFan": true,
     "logLevel": 2
 }

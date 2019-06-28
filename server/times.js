@@ -3,7 +3,24 @@ let suncalc = require("suncalc"),
     log = require('./log.js')("Times"),
     format = require('./format.js');
 
-function get(formatted){
+function adjustForClouds(sunset, weather){
+    if (!weather) 
+        return sunset;
+
+    if (!weather.clouds){
+        log.info(`No cloud report available.`);
+        return sunset;
+    }
+
+    if (weather.clouds > 70)
+        return sunset.add(-60, 'minutes');
+    else if (weather.clouds > 50)
+        return sunset.add(-30, 'minutes');
+    else
+        return sunset;
+}
+
+function get(formatted, weather){
     let tz = 'America/Denver'; // Was I using this?
     let now = moment();
     let times = suncalc.getTimes(now, 40.7608, -111.891);
@@ -14,7 +31,8 @@ function get(formatted){
 
     let ss = moment(Date.parse(times.sunsetStart));
     ss.date(now.date());
-    let sunset = new Date(ss);
+    let sunset = new Date(adjustForClouds(ss, weather));
+    let trueSunset = new Date(ss);
 
     let fourAm = moment().startOf('day').add(4, 'hours').toDate();
     now = now.toDate();
@@ -26,6 +44,7 @@ function get(formatted){
         isNight: now.getTime() < sunrise || now.getTime() > sunset,
         sunrise: formatted ? format(sunrise) : sunrise,
         sunset: formatted ? format(sunset) : sunset,
+        trueSunset: formatted ? format(trueSunset) : trueSunset,
         dayReset: formatted ? format(fourAm) : fourAm
     };
 }
@@ -42,7 +61,7 @@ const namedTimeRegex = /^([a-z][a-z0-9_]*)$/;
 const modifiedNamedTimeRegex = /^([a-z0-9_]+)([-+])([0-9]+)$/;
 
 function dateFromNow(formatted, unit, num){
-    let date = moment().startOf('day').add(num, unit);
+    let date = moment().startOf(unit).add(num, unit);
     return formatted ? format(date, 'HH:mm') : date;
 }
 
