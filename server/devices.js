@@ -3,6 +3,7 @@ const util = require('util'),
       Wemo = require('./wemo.js'),
       Etek = require('./etek.js'),
       Tuya = require('./tuya.js'),
+      TuyaNew = require('./tuyanew.js'),
       Readonly = require('./readonly.js'),
       Alarm = require('./alarm.js'),
       Thermostat = require('./thermostat.js'),
@@ -50,6 +51,13 @@ module.exports = class Devices {
         if (config.tuya){
             for (let device of (config.tuya.devices || [])){ 
                 this.deviceTypes[device.name] = 'tuya';
+                this.init(device); 
+            }
+        }
+
+        if (config.tuyanew){
+            for (let device of (config.tuyanew.devices || [])){ 
+                this.deviceTypes[device.name] = 'tuyanew';
                 this.init(device); 
             }
         }
@@ -164,6 +172,8 @@ module.exports = class Devices {
             clazz = Hue;
         else if (type == 'tuya')
             clazz = Tuya;
+        else if (type == 'tuyanew')
+            clazz = TuyaNew;
         else
             throw 'No constructor for type ' + type;
 

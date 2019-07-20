@@ -368,5 +368,8 @@ module.exports = class Etek {
         }
     }
 
+    logAt(level){
+        this.log.setLevel(level);
+    }
 }
 

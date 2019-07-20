@@ -1,4 +1,4 @@
-const TuyAPI = require('tuyapi'),
+const TuyDevice = require('./tuya_legacy/index.js'),
       log = require('./log.js');
 
 module.exports = class Tuya {
@@ -8,7 +8,7 @@ module.exports = class Tuya {
         this.log = log('Tuya ' + this.name);
         this.log.info(`Initializing ${this.name}.`);
 
-        this.device = new TuyAPI({
+        this.device = new TuyDevice({
             id: device.id,
             key: device.key,
             ip: device.ip
@@ -44,6 +44,10 @@ module.exports = class Tuya {
         catch (e){
             this.log.error(`Error for ${this.name}: ${e}`);
         }
+    }
+
+    logAt(level){
+        this.log.setLevel(level);
     }
 
     on() { return this._set(true); }

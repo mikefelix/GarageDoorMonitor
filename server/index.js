@@ -92,7 +92,8 @@ async function currentWeather(){
 const routes = {
     'GET /devicegroups': async () => {
         return {
-            groups: config.rooms
+            groups: config.rooms,
+            aliases: config.aliases
         }
     },
     'PUT /(l)?device/([a-z0-9_]+)': async (request, lock, device) => {
@@ -309,7 +310,7 @@ const routes = {
         log.trace('Thermostat poo 2');
     },
     'POST /therm/temp([0-9]+)': async (request, temp) => {
-        return await devices.therm.set('target_temperature_f', temp);
+        return await devices.therm.set('temp', temp);
     },
     'POST /therm/fan([0-9]+)': async (request, duration) => {
         if (!duration) duration = 15;
@@ -342,10 +343,12 @@ const routes = {
     },
     'POST /nestaway': async () => {
         log("Nest reports away state.");
+        devices.therm.since = new Date();
         return "Got it.";
     },
     'POST /nesthome': async () => {
         log("Nest reports people coming home.");
+        devices.therm.since = new Date();
         return "Got it.";
     },
     'POST /log/([a-zA-Z]+)/([1-5])': async (request, module, level) => {

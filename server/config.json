@@ -14,13 +14,13 @@
         ]
     }, 
     "wemo": {
-        "devices": ["fan","vent","stereo","couchlamp","heater"]
+        "devices": ["bathroomfan","vent","charger","couchlamp","bedroomfan"]
     },
     "etek": {
         "baseUrl": "https://server1.vesync.com:4007",
         "login": "michael.felix@gmail.com", 
         "password": "4vpvkTGX41Ay5VK",
-        "devices": ["coffee", "wine", "piano", "aquarium", "bedheat", "grow", "office", "floorlamp"],
+        "devices": ["coffee", "wine", "piano", "aquarium", "bedheat", "dininglamp", "office"],
         "meterBulbs": ["coffee", "bedheat", "piano"]
     },
     "nest": {
@@ -30,22 +30,26 @@
     },
     "weather": "https://api.openweathermap.org/data/2.5/weather?id=5778755&APPID=4baebedec5d766f259f6852bc3353d4e",
     "fermenter": "http://192.168.0.101/brewpi/socketmessage.php",
-    "tuya": {
+    "tuyanew": {
         "devices": [
             {
-                "name": "bedlamp_dead",
+                "name": "floorlamp",
                 "ip": "192.168.0.150",
                 "id": "10670365bcddc2fa7def",
                 "key": "dd45ee2bcad6b095",
                 "index": 1
             },
             {
-                "name": "charger_dead",
+                "name": "scent",
                 "ip": "192.168.0.150",
                 "id": "10670365bcddc2fa7def",
                 "key": "dd45ee2bcad6b095",
                 "index": 2
-            },
+            }
+        ]
+    },
+    "tuya": {
+        "devices": [
             {
                 "name": "bedlamp",
                 "ip": "192.168.0.136",
@@ -54,7 +58,7 @@
                 "index": 1
             },
             {
-                "name": "charger",
+                "name": "stereo",
                 "ip": "192.168.0.136",
                 "id": "10670365bcddc2fa7d79",
                 "key": "773f379a50fced17",
@@ -63,49 +67,46 @@
         ]
     },
     "devices": {
-        "phone": "192.168.0.129",
-        "phone2": "192.168.0.104",
-        "phone3": "192.168.0.124",
+        "mike": "192.168.0.104",
+        "lily": "192.168.0.111",
+        "aaron": "192.168.0.134",
         "bigcomputer": "192.168.0.112",
         "littlecomputer": "192.168.0.105"
     },
     "rooms": [
         {
-            "name": "bedroom",
-            "devices": [ "bedheat", "bedlamp", "charger", "stereo" ]
+            "name": "upstairs",
+            "devices": [ "bedheat", "bedlamp", "charger", "stereo", "bedroomfan" ]
         },
         {
-            "name": "living room",
-            "devices": [ "floorlamp", "couchlamp", "aquarium", "wine" ]
-        },
-        {
-            "name": "garage",
-            "devices": [ "garagedoor", "outside" ]
-        },
-        {
-            "name": "basement",
-            "devices": [ "grow", "heater" ]
+            "name": "downstairs",
+            "devices": [ "floorlamp", "couchlamp", "aquarium", "wine", "dininglamp", "outside" ]
         },
         {
             "name": "other",
             "collapsed": true,
-            "devices": [ "fan", "vent", "office", "coffee", "piano" ]
+            "devices": [ "bathroomfan", "vent", "office", "coffee", "piano", "garagedoor"]
         },
         {
             "name": "devices",
             "collapsed": true,
-            "devices": [ "phone", "phone2", "phone3", "bigcomputer", "littlecomputer" ]
+            "devices": [ "mike", "aaron", "lily", "bigcomputer", "littlecomputer" ]
         }
     ],
     "aliases":{
-        "floorlamp": "Floor lamp",
-        "couchlamp": "Table lamp",
-        "bedheat": "Bed",
-        "bedlamp": "Lamp",
-        "garagedoor": "Door",
-        "outside": "Lights",
-        "phone2": "Mike phone",
-        "phone": "Lily phone"
+        "floorlamp": "Floor",
+        "couchlamp": "Couch",
+        "dininglamp": "Table",
+        "bedheat": "Heat",
+        "bathroomfan": "Bathroom",
+        "bedroomfan": "Fan",
+        "bedlamp": "Bed",
+        "garagedoor": "Garage",
+        "mike": "Mike",
+        "lily": "Lily",
+        "aaron": "Aaron",
+        "bigcomputer": "Big",
+        "littlecomputer": "Little"
     },
     "useExtraFan": true,
     "logLevel": 2

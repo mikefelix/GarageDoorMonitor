@@ -77,7 +77,7 @@ module.exports = class Alarm {
     }
 
     enabledForToday(){
-        return this.config.settings[times.dayNum()] != null;
+        return this.config.settings[times.dayNum()] != null || (this.config.override && this.config.override.time);
     }
 
     ringTimeToday(){
@@ -97,20 +97,22 @@ module.exports = class Alarm {
     }
 
     timeToTrigger(){
-        if (this.config.override && this.config.override.time){
+        if (this.config.hasTriggeredToday())
+            return this.config.lastTriggeredTime;
+
+        if (this.config.override && this.config.override.time)
             return this.config.override.time;
-        }
 
         return this.config.settings[times.dayNum()] || "06:00";
     }
 
-    setTime(time, day, override){
+    setTime(time, days, override){
         if (override){
-            this.config.override = {day, time};
+            this.config.override = {days, time};
         }
         else {
-            log.info(`Set alarm time to ${time} for day ${day}.`);
-            this.config.settings[day] = time;
+            log.info(`Set alarm time to ${time} for days ${days}.`);
+            this.config.settings[days] = time;
         }
 
         this._writeFile();
@@ -262,4 +264,7 @@ module.exports = class Alarm {
         return fs.writeFileSync('./_alarm.json', JSON.stringify(this.config));
     }
 
+    logAt(level){
+        log.setLevel(level);
+    }
 }

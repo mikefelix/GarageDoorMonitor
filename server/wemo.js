@@ -151,4 +151,8 @@ module.exports = class Wemo {
             return false;
         }
     }
+
+    logAt(level){
+        this.log.setLevel(level);
+    }
 }

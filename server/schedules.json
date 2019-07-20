@@ -10,8 +10,8 @@
             "end": "03:00"
         },
         "earlymorn": {
-            "start": "03:00",
-            "end": "07:30"
+            "start": "02:00",
+            "end": "09:30"
         },
         "sleepytime": {
             "start": "22:00",
@@ -45,7 +45,7 @@
         "outside": {
             "off": "/5"
         },
-        "fan": {
+        "bathroomfan": {
             "off": "/90",
             "override": false
         },
@@ -72,6 +72,10 @@
             "on": "housefan.on",
             "off": "!housefan.on"
         },
+        "bedroomfan": {
+            "on": "vent & !earlymorn",
+            "off": "!vent"
+        },
         "office": {
             "on": "!day & computer",
             "off": "day | !computer"
@@ -84,9 +88,6 @@
             "on": "sleepytime & home & weather.temp < 50",
             "off": "!sleepytime | bedheat.power < 5",
             "override": true
-        },
-        "grow": {
-            "off": "/1"
         },
         "scent": {
             "on": "!sleepytime & !hvac.away & /10",

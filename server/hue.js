@@ -93,5 +93,8 @@ module.exports = class Hue {
         });
     }    
 
+    logAt(level){
+        this.log.setLevel(level);
+    }
 }
 

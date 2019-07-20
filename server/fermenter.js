@@ -2,6 +2,7 @@ let axios = require('axios').create(),
     format = require('./format.js'),
     log = require('./log.js')('Fermenter'),
     qs = require('querystring'),
+    delay = require('./delay.js'),
     timeout = require('./timeout.js');
 
 axios.interceptors.request.use(request => {
@@ -29,12 +30,6 @@ module.exports = class Fermenter {
         return res.data;
     }
 
-    wait(time){
-        return new Promise(function(resolve, reject){
-            setTimeout(resolve, time);
-        })
-    }
-
     async getState(){
         try {
             let data = await this._post('lcd');
@@ -43,7 +38,7 @@ module.exports = class Fermenter {
             if (typeof devices != 'object'){
                 log.debug('Refreshing devices.');
                 await this._post('refreshDeviceList');
-                await this.wait(1000);
+                await delay(1000);
                 devices = await this._post('getDeviceList');
             }
 
@@ -75,7 +70,7 @@ module.exports = class Fermenter {
     async off(){
         try {
             let res = await this._post('setOff');
-            await this.wait(500);
+            await delay(5000);
             return await this.getState();
         }
         catch (e){
@@ -99,7 +94,8 @@ module.exports = class Fermenter {
                 log.info('Enable heater result: ' + JSON.stringify(res));
             }
             
-            await this.wait(500);
+            await delay(5000);
+
             return await this.getState();
         }
         catch (e){
@@ -126,7 +122,8 @@ module.exports = class Fermenter {
             log.info('Set beer to ' + temp);
             await this._post(beer == 'beer' ? 'setBeer' : 'setFridge', temp);
 
-            await this.wait(500);
+            await delay(5000);
+
             return await this.getState();
         }
         catch (e){

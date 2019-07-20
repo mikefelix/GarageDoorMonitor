@@ -84,7 +84,7 @@ module.exports = class Garage {
                 }
             }
             catch (e){
-                log(1, `Error: ${e}`);
+                log.error(`Error: ${e}`);
                 reject(e);
             }
         });
@@ -98,7 +98,7 @@ module.exports = class Garage {
         }
         else {
             exec('/home/felix/bin/snapshot.sh', (error, stdout, stderr) => {
-                if (error) log(1, "Failed to save snapshot. " + error);
+                if (error) log.error("Failed to save snapshot. " + error);
             });
         }
     }
@@ -124,8 +124,12 @@ module.exports = class Garage {
             return tesselState;
         }
         catch (e) {
-            log(1, 'Error with Tessel state: ' + e);
+            log.error('Error with Tessel state: ' + e);
             return { offline: true };
         }
+    }
+
+    logAt(level){
+        log.setLevel(level);
     }
 }

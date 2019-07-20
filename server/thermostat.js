@@ -1,6 +1,7 @@
 let axios = require("axios"),
     format = require('./format.js'),
     Q = require('q'),
+    delay = require('./delay.js'),
     log = require("./log.js")("Therm");
         
 module.exports = class Thermostat {
@@ -28,8 +29,10 @@ module.exports = class Thermostat {
                     } 
                     else {
                         let away = res.away != 'home';
-                        if (away != this.away) 
+                        if (away != this.away) {
+                            this.since = new Date()	
                             log.info(`Set away to ${away} (${res.away}).`);
+                        }
 
                         this.away = away;
                     }
@@ -71,17 +74,20 @@ module.exports = class Thermostat {
 
     async set(prop, value){
         log.info(`Set ${prop} to ${value}.`);
-        return await this._callThermostat(prop, value);
+        await this._callThermostat(prop, value);
+        this.state = null;
+        await delay(2000);
+        return await this.getState();
     }
 
     async moveTemp1(){
         let state = await this.getState();
         if (state.target_temperature_f){
             if (state.mode == 'cool'){
-                await this.set('target_temperature_f', state.target_temperature_f - 1);
+                await this.set('temp', state.target_temperature_f - 1);
             }
             else if (state.mode == 'heat'){
-                await this.set('target_temperature_f', state.target_temperature_f + 1);
+                await this.set('temp', state.target_temperature_f + 1);
             }
         }
     }
@@ -104,6 +110,7 @@ module.exports = class Thermostat {
             state,
             on: state != 'off',
             mode: data.hvac_mode,
+            since: format(this.since, "H:mm"),
             fanOffTime
         };
     }
@@ -131,6 +138,11 @@ module.exports = class Thermostat {
             else if (prop == 'away'){
                 if (value !== undefined)
                     data = { away: (value ? 'away' : 'home') };
+            }
+            else if (prop == 'temp'){
+                data = { 
+                    target_temperature_f: +value 
+                };
             }
 
             let method = data ? 'PUT' : 'GET';
@@ -163,4 +175,9 @@ module.exports = class Thermostat {
             return undefined;
         }
     }
+
+    logAt(level){
+        log.setLevel(level);
+    }
+
 }
