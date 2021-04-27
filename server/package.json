@@ -12,7 +12,7 @@
     "moment-timezone": "^0.5.11",
     "q": "^1.5.1",
     "querystring": "^0.2.0",
-    "redis": "^2.8.0",
+    "redis": "^3.1.1",
     "request": "~2.72.0",
     "suncalc": "^1.8.0",
     "tuyapi": "github:codetheweb/tuyapi",
